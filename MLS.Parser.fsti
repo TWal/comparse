@@ -4,9 +4,16 @@ open MLS.Bytes
 
 (*** Basic definitions ***)
 
-type consumed_length (b:bytes) = n:nat{n <= bytes_length b}
-type bare_parser (a:Type) = b:bytes -> option (a & consumed_length b)
-type bare_serializer (a:Type) = a -> bytes
+let rec is_suffix_explicit (suffix:bytes) (buf:bytes) (prefixes:list bytes): Tot Type0 (decreases prefixes) =
+  match prefixes with
+  | [] -> suffix == buf
+  | h::t -> is_suffix_explicit (bytes_concat h suffix) buf t
+let is_suffix (suffix:bytes) (buf:bytes) = exists prefixes. is_suffix_explicit suffix buf prefixes
+
+type suffix_of (b:bytes) = suf:bytes{is_suffix suf b}
+type extension_of (suf:bytes) = b:bytes{is_suffix suf b}
+type bare_parser (a:Type) = b:bytes -> option (a & suffix_of b)
+type bare_serializer (a:Type) = x:a -> suffix:bytes -> extension_of suffix
 
 /// What is the reason behind `parser_serializer_unit` and `parser_serializer`?
 /// In some functions (such as `pse_list` which is used to build `ps_seq` or `ps_bytes`),
@@ -29,49 +36,37 @@ type bare_serializer (a:Type) = a -> bytes
 noeq type parser_serializer_unit (a:Type) = {
   parse: bare_parser a;
   serialize: bare_serializer a;
-  parse_serialize_inv: x:a -> Lemma (
-    parse (serialize x) == Some (x, bytes_length (serialize x))
+  parse_serialize_inv: x:a -> suffix:bytes -> Lemma (
+    parse (serialize x suffix) == Some (x, suffix)
   );
   serialize_parse_inv: buf:bytes -> Lemma (
     match parse buf with
-    | Some (x, l) ->  serialize x == (bytes_slice buf 0 l)
+    | Some (x, suffix) -> buf == serialize x suffix
     | None -> True
   );
-  parse_no_lookahead: b1:bytes -> b2:bytes -> Lemma
-    (requires (
-      match parse b1 with
-      | Some (_, l) -> l <= bytes_length b2 /\ (bytes_slice b1 0 l == bytes_slice b2 0 l)
-      | None -> True
-    ))
-    (ensures (
-      match parse b1 with
-      | Some (x1, l1) -> begin
-        match parse b2 with
-        | Some (x2, l2) -> x1 == x2 /\ l1 == l2
-        | None -> False
-      end
-      | None -> True
-    ))
+  parse_no_lookahead: b1:bytes -> b2:bytes -> Lemma (
+    True
+    //bytes_concat_length b1 b2;
+    //match parse b1 with
+    //| Some (x, l) -> parse (bytes_concat b1 b2) == Some (x, l)
+    //| None -> True
+  )
+  //parse_no_lookahead: b1:bytes -> b2:bytes -> Lemma
+  //  (requires (
+  //    match parse b1 with
+  //    | Some (_, l) -> l <= bytes_length b2 /\ (bytes_slice b1 0 l == bytes_slice b2 0 l)
+  //    | None -> True
+  //  ))
+  //  (ensures (
+  //    match parse b1 with
+  //    | Some (x1, l1) -> begin
+  //      match parse b2 with
+  //      | Some (x2, l2) -> x1 == x2 /\ l1 == l2
+  //      | None -> False
+  //    end
+  //    | None -> True
+  //  ))
 }
-
-(*
-val is_valid_slice: bytes -> i:nat{i < bytes_length} -> bool
-
-val length_is_valid_slice: b1:bytes -> b2:bytes -> Lemma
-  (is_valid_slice (concat b1 b2) (length b1))
-
-bytes_slice b i j
-i = 0 /\ is_valid_slice j
-is_valid_slice i /\ j = bytes_length b
-
-i1 i2 i3 i3
-
-is_valid_slice b i1
-is_valid_slice (slice b i1 len) i2
-is_valid_slice (slice b i1 len) i2
-
-is_valid_extended b i2 -> exists. suite i, ça marche
-*)
 
 let is_not_unit (#a:Type) (ps_a:parser_serializer_unit a) = ps_a.parse bytes_empty == None
 let parser_serializer (a:Type) = ps_a:parser_serializer_unit a{is_not_unit ps_a}
@@ -134,7 +129,7 @@ let in_range (r:size_range) (x:nat) =
 let rec byte_length (#a:Type) (ps_a:parser_serializer a) (l:list a) : nat =
   match l with
   | [] -> 0
-  | h::t -> bytes_length (ps_a.serialize h) + byte_length ps_a t
+  | h::t -> bytes_length (ps_a.serialize h bytes_empty) + byte_length ps_a t
 
 type blseq (a:Type) (ps_a:parser_serializer a) (r:size_range) = s:Seq.seq a{in_range r (byte_length ps_a (Seq.seq_to_list s))}
 type blbytes (r:size_range) = b:bytes{in_range r (bytes_length b)}

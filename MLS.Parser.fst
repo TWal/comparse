@@ -6,125 +6,141 @@ open MLS.Bytes
 
 (*** Helper functions ***)
 
-let delete_prefix (b:bytes) (i:consumed_length b) : bytes =
-  bytes_slice b i (bytes_length b)
+#push-options "--ifuel 1 --fuel 1"
+val is_suffix_explicit_transitive: b1:bytes -> b2:bytes -> b3:bytes -> l1:list bytes -> l2:list bytes -> Lemma
+  (requires is_suffix_explicit b1 b2 l1 /\ is_suffix_explicit b2 b3 l2)
+  (ensures is_suffix_explicit b1 b3 (l1@l2))
+  (decreases l1)
+let rec is_suffix_explicit_transitive b1 b2 b3 l1 l2 =
+  match l1 with
+  | [] -> ()
+  | h::t -> is_suffix_explicit_transitive (bytes_concat h b1) b2 b3 t l2
+#pop-options
 
-val delete_prefix_length: b:bytes -> i:consumed_length b -> Lemma
-  (bytes_length (delete_prefix b i) == (bytes_length b) - i)
-  [SMTPat (bytes_length (delete_prefix b i))]
-let delete_prefix_length b i =
-  bytes_slice_length b i (bytes_length b)
+let is_suffix_transitive b1 b2 b3 =
+  eliminate exists l1. is_suffix_explicit b1 b2 l1
+  returns _
+  with _.
+  eliminate exists l2. is_suffix_explicit b2 b3 l2
+  returns is_suffix b1 b3
+  with _. is_suffix_explicit_transitive b1 b2 b3 l1 l2
 
-//val delete_prefix_index: b:bytes -> i:consumed_length b -> j:nat{j < bytes_length (delete_prefix b i)} -> Lemma
-//  (bytes_index (delete_prefix b i) j == bytes_index b (j+i))
-//  [SMTPat (bytes_index (delete_prefix b i) j)]
-//let delete_prefix_index b i j = ()
+val is_suffix_explicit_to_implicit: b1:bytes -> b2:bytes -> l:list bytes -> Lemma
+  (requires is_suffix_explicit b1 b2 l)
+  (ensures is_suffix b1 b2)
+let is_suffix_explicit_to_implicit b1 b2 l =
+  introduce exists l. is_suffix_explicit b1 b2 l
+  with l
+  and _
+
+#push-options "--fuel 1 --ifuel 1"
+val is_suffix_reflexive: b:bytes -> Lemma (is_suffix b b)
+let is_suffix_reflexive b =
+  is_suffix_explicit_to_implicit b b []
+#pop-options
 
 (*** Parser combinators ***)
 
 let bind #a #b ps_a ps_b =
-  let parse_ab (buf:bytes): option ((xa:a&(b xa)) & consumed_length buf) =
+  let parse_ab (buf:bytes): option ((xa:a&(b xa)) & suffix_of buf) =
     match ps_a.parse buf with
     | None -> None
-    | Some (xa, la) -> begin
-      match (ps_b xa).parse (delete_prefix buf la) with
+    | Some (xa, buf_suffix) -> begin
+      match (ps_b xa).parse buf_suffix with
       | None -> None
-      | Some (xb, lb) ->
-        Some ((|xa, xb|), la+lb)
+      | Some (xb, buf_suffix_suffix) -> (
+        is_suffix_transitive buf_suffix_suffix buf_suffix buf;
+        Some ((|xa, xb|), buf_suffix_suffix)
+      )
     end
   in
-  let serialize_ab (x:(xa:a&(b xa))): bytes =
+  let serialize_ab (x:(xa:a&(b xa))) (suffix:bytes): extension_of suffix =
     let (|xa, xb|) = x in
-    bytes_concat (ps_a.serialize xa) ((ps_b xa).serialize xb)
+    let xb_suffix = ((ps_b xa).serialize xb suffix) in
+    let xa_xb_suffix = ps_a.serialize xa xb_suffix in
+    is_suffix_transitive suffix xb_suffix xa_xb_suffix;
+    xa_xb_suffix
   in
   let lemma_not_unit (): Lemma((parse_ab bytes_empty == None) <==> (ps_a.parse bytes_empty == None) \/ (forall xa. (ps_b xa).parse bytes_empty == None)) = begin
-    match parse_ab bytes_empty with
-    | None -> begin
-      match ps_a.parse bytes_empty with
-      | None -> ()
-      | Some (xa, la) ->
-        FStar.Classical.forall_intro (fun (x:a) -> (
-          let lemma (): Lemma ((delete_prefix bytes_empty la) == bytes_empty) =
-            delete_prefix_length bytes_empty la;
-            bytes_empty_length ();
-            bytes_length_zero (delete_prefix bytes_empty la)
-          in lemma ();
-          ps_a.parse_serialize_inv x;
-          let lemma (): Lemma (la == 0) =
-            bytes_empty_length ()
-          in lemma ();
-          let lemma (): Lemma (bytes_slice bytes_empty 0 la == bytes_empty) =
-            bytes_slice_length bytes_empty 0 la;
-            bytes_length_zero (bytes_slice bytes_empty 0 la)
-          in lemma ();
-          let lemma (): Lemma (bytes_slice (ps_a.serialize x) 0 la == bytes_empty) =
-            bytes_slice_length (ps_a.serialize x) 0 la;
-            bytes_length_zero (bytes_slice (ps_a.serialize x) 0 la)
-          in lemma ();
-          ps_a.parse_no_lookahead bytes_empty (ps_a.serialize x);
-          ()
-        ) <: Lemma (is_not_unit (ps_b x)))
-    end
-    | Some _ -> (
-      match ps_a.parse bytes_empty with
-      | None -> ()
-      | Some (xa, la) -> (
-        let lemma (): Lemma ((delete_prefix bytes_empty la) == bytes_empty) =
-          delete_prefix_length bytes_empty la;
-          bytes_empty_length ();
-          bytes_length_zero (delete_prefix bytes_empty la)
-        in lemma ()
-      )
-    )
+    admit()
+    //match parse_ab bytes_empty with
+    //| None -> begin
+    //  match ps_a.parse bytes_empty with
+    //  | None -> ()
+    //  | Some (xa, la) ->
+    //    FStar.Classical.forall_intro (fun (x:a) -> (
+    //      let lemma (): Lemma ((delete_prefix bytes_empty la) == bytes_empty) =
+    //        delete_prefix_length bytes_empty la;
+    //        bytes_empty_length ();
+    //        bytes_length_zero (delete_prefix bytes_empty la)
+    //      in lemma ();
+    //      ps_a.parse_serialize_inv x;
+    //      let lemma (): Lemma (la == 0) =
+    //        bytes_empty_length ()
+    //      in lemma ();
+    //      let lemma (): Lemma (bytes_slice bytes_empty 0 la == bytes_empty) =
+    //        bytes_slice_length bytes_empty 0 la;
+    //        bytes_length_zero (bytes_slice bytes_empty 0 la)
+    //      in lemma ();
+    //      let lemma (): Lemma (bytes_slice (ps_a.serialize x) 0 la == bytes_empty) =
+    //        bytes_slice_length (ps_a.serialize x) 0 la;
+    //        bytes_length_zero (bytes_slice (ps_a.serialize x) 0 la)
+    //      in lemma ();
+    //      //ps_a.parse_no_lookahead bytes_empty (ps_a.serialize x);
+    //      admit()
+    //    ) <: Lemma (is_not_unit (ps_b x)))
+    //end
+    //| Some _ -> (
+    //  match ps_a.parse bytes_empty with
+    //  | None -> ()
+    //  | Some (xa, la) -> (
+    //    let lemma (): Lemma ((delete_prefix bytes_empty la) == bytes_empty) =
+    //      delete_prefix_length bytes_empty la;
+    //      bytes_empty_length ();
+    //      bytes_length_zero (delete_prefix bytes_empty la)
+    //    in lemma ()
+    //  )
+    //)
   end in
   lemma_not_unit ();
   ({
     parse = parse_ab;
     serialize = serialize_ab;
-    parse_serialize_inv = (fun (x:(xa:a&(b xa))) ->
+    parse_serialize_inv = (fun (x:(xa:a&(b xa))) (suffix:bytes) ->
       let (|xa, xb|) = x in
-      ps_a.parse_serialize_inv xa;
-      (ps_b xa).parse_serialize_inv xb;
-      bytes_concat_length (ps_a.serialize xa) ((ps_b xa).serialize xb);
-      bytes_slice_concat_left (ps_a.serialize xa) ((ps_b xa).serialize xb);
-      bytes_slice_concat_right (ps_a.serialize xa) ((ps_b xa).serialize xb);
-      bytes_slice_whole (ps_a.serialize xa);
-      ps_a.parse_no_lookahead (ps_a.serialize xa) (serialize_ab x);
+      let xb_suffix = ((ps_b xa).serialize xb suffix) in
+      let xa_xb_suffix = ps_a.serialize xa xb_suffix in
+      (ps_b xa).parse_serialize_inv xb suffix;
+      ps_a.parse_serialize_inv xa xb_suffix;
+      is_suffix_transitive suffix xb_suffix xa_xb_suffix;
       ()
     );
+
     serialize_parse_inv = (fun (buf:bytes) ->
       match parse_ab buf with
       | None -> ()
-      | Some (xab, l) ->
-        let (xa, la) = Some?.v (ps_a.parse buf) in
-        let (xb, lb) = Some?.v ((ps_b xa).parse (delete_prefix buf la)) in
+      | Some (xab, suffix) ->
+        let (|xa, xb|) = xab in
+        let (xa, xb_suffix) = Some?.v (ps_a.parse buf) in
+        let (xb, suffix) = Some?.v ((ps_b xa).parse xb_suffix) in
         ps_a.serialize_parse_inv buf;
-        (ps_b xa).serialize_parse_inv (delete_prefix buf la);
-        bytes_slice_slice buf la (bytes_length buf) 0 lb;
-        bytes_slice_slice buf 0 (la+lb) 0 la;
-        bytes_slice_slice buf 0 (la+lb) la (la+lb);
-        bytes_slice_length buf 0 (la+lb);
-        bytes_concat_slice (bytes_slice buf 0 (la+lb)) la
+        (ps_b xa).serialize_parse_inv xb_suffix
     );
     parse_no_lookahead = (fun (b1 b2:bytes) ->
+      bytes_concat_length b1 b2;
       match parse_ab b1 with
       | None -> ()
-      | Some (xab, l) ->
-        let (|xa, xb|) = xab in
-        let (_, la) = Some?.v (ps_a.parse b1) in
-        bytes_slice_slice b1 0 l 0 la;
-        bytes_slice_slice b2 0 l 0 la;
-        ps_a.parse_no_lookahead b1 b2;
-        let (_, lb1) = Some?.v ((ps_b xa).parse (delete_prefix b1 la)) in
-        bytes_slice_slice b1 la (bytes_length b1) 0 lb1;
-        bytes_slice_slice b2 la (bytes_length b2) 0 lb1;
-        bytes_slice_slice b1 0 (la + lb1) la (la+lb1);
-        bytes_slice_slice b2 0 (la + lb1) la (la+lb1);
-        (ps_b xa).parse_no_lookahead (delete_prefix b1 la) (delete_prefix b2 la);
+      | Some (x, l) -> (
+        let (xa, la) = Some?.v (ps_a.parse b1) in
+        //ps_a.parse_no_lookahead b1 b2;
+        //assert (ps_a.parse (bytes_concat b1 b2) == Some(xa, la));
+        //let (xb, lb) = Some?.v ((ps_b xa).parse (delete_prefix b1 la)) in
+        //assume (delete_prefix (bytes_concat b1 b2) la)
+        //assume (parse_ab (bytes_concat b1 b2) == Some (x, l))
         ()
+      )
     )
   })
-
 
 let isomorphism_explicit #a b ps_a f g g_f_inv f_g_inv =
   let parse_b buf =
@@ -162,44 +178,52 @@ let isomorphism #a b ps_a f g =
 
 let ps_unit =
   {
-    parse = (fun _ -> Some ((), 0));
-    serialize = (fun _ -> bytes_empty);
-    parse_serialize_inv = (fun _ -> bytes_empty_length ());
-    serialize_parse_inv = (fun buf ->
-      bytes_slice_length buf 0 0;
-      bytes_length_zero (bytes_slice buf 0 0)
-    );
+    parse = (fun b -> is_suffix_reflexive b; Some ((), b));
+    serialize = (fun _ b -> is_suffix_reflexive b; b);
+    parse_serialize_inv = (fun _ b -> ());
+    serialize_parse_inv = (fun buf -> ());
     parse_no_lookahead = (fun _ _ -> ());
   }
 
+#push-options "--fuel 2"
 let ps_lbytes n =
-  let parse_lbytes (buf:bytes): option (lbytes n & consumed_length buf) =
+  let parse_lbytes (buf:bytes): option (lbytes n & suffix_of buf) =
     if bytes_length buf < n then
       None
-    else
-      Some (bytes_slice_length buf 0 n;bytes_slice buf 0 n, (n <: consumed_length buf))
+    else (
+      bytes_slice_length buf 0 n;
+      let x = bytes_slice buf 0 n in
+      let suffix = bytes_slice buf n (bytes_length buf) in
+      bytes_concat_slice buf n;
+      is_suffix_explicit_to_implicit suffix buf [x];
+      Some (x, suffix)
+    )
   in
-  let serialize_lbytes (b:lbytes n): bytes =
-    b
+  let serialize_lbytes (b:lbytes n) (suffix:bytes): extension_of suffix =
+    is_suffix_explicit_to_implicit suffix (bytes_concat b suffix) [b];
+    bytes_concat b suffix
   in
   bytes_empty_length ();
-  assert(parse_lbytes bytes_empty == None);
   {
     parse = parse_lbytes;
     serialize = serialize_lbytes;
-    parse_serialize_inv = (fun x ->
-      bytes_slice_whole x
+    parse_serialize_inv = (fun b suffix ->
+      bytes_concat_length b suffix;
+      bytes_slice_concat_left b suffix;
+      bytes_slice_concat_right b suffix
     );
-    serialize_parse_inv = (fun (buf:bytes) -> ());
-    parse_no_lookahead = (fun (b1 b2:bytes) ->
-      match parse_lbytes b1 with
+    serialize_parse_inv = (fun (buf:bytes) ->
+      match parse_lbytes buf with
       | None -> ()
-      | Some _ -> (
-        bytes_slice_slice b1 0 n 0 n;
-        bytes_slice_slice b2 0 n 0 n
+      | Some (b, suffix) -> (
+        bytes_concat_slice buf n
       )
+    );
+    parse_no_lookahead = (fun (b1 b2:bytes) ->
+      ()
     )
   }
+#pop-options
 
 (*
 val ps_uint: t:IT.inttype{IT.unsigned t /\ ~(IT.U1? t)} -> parser_serializer (IT.uint_t t IT.SEC)
@@ -225,22 +249,30 @@ let ps_to_pse #a ps_a =
   let parse_exact_a (buf:bytes) =
     match ps_a.parse buf with
     | None -> None
-    | Some (x, l) ->
-      if l = bytes_length buf then
+    | Some (x, suffix) ->
+      if bytes_length suffix = 0 then
         Some x
       else
         None
   in
   let serialize_exact_a (x:a) =
-    ps_a.serialize x
+    ps_a.serialize x bytes_empty
   in
   {
     parse_exact = parse_exact_a;
     serialize_exact = serialize_exact_a;
-    parse_serialize_inv_exact = (fun x -> ps_a.parse_serialize_inv x);
+    parse_serialize_inv_exact = (fun x ->
+      ps_a.parse_serialize_inv x bytes_empty;
+      bytes_empty_length ()
+    );
     serialize_parse_inv_exact = (fun buf ->
-      ps_a.serialize_parse_inv buf;
-      bytes_slice_whole buf
+      match parse_exact_a buf with
+      | None -> ()
+      | Some _ -> (
+        let (x, suffix) = Some?.v (ps_a.parse buf) in
+        ps_a.serialize_parse_inv buf;
+        bytes_length_zero suffix
+      )
     );
   }
 
@@ -252,11 +284,11 @@ let rec _parse_la #a ps_a buf =
   ) else (
     match ps_a.parse buf with
     | None -> None
-    | Some (h, l) -> begin
-      if l = 0 then (
+    | Some (h, suffix) -> begin
+      if bytes_length suffix >= bytes_length buf then (
         None //Impossible case
       ) else (
-        match _parse_la ps_a (delete_prefix buf l) with
+        match _parse_la ps_a suffix with
         | None -> None
         | Some t -> Some (h::t)
       )
@@ -268,7 +300,7 @@ let rec _serialize_la #a ps_a l =
   match l with
   | [] -> bytes_empty
   | h::t ->
-    bytes_concat (ps_a.serialize h) (_serialize_la ps_a t)
+    ps_a.serialize h (_serialize_la ps_a t)
 
 #push-options "--fuel 1"
 let pse_list #a ps_a =
@@ -278,31 +310,21 @@ let pse_list #a ps_a =
     match l with
     | [] -> bytes_empty_length ()
     | h::t ->
-      if bytes_length (ps_a.serialize h) = 0 then (
-        ps_a.parse_serialize_inv h;
-        bytes_length_zero (ps_a.serialize h)
-      ) else (
-        bytes_concat_length (ps_a.serialize h) (_serialize_la ps_a t);
-        bytes_slice_concat_left (ps_a.serialize h) (_serialize_la ps_a t);
-        bytes_slice_concat_right (ps_a.serialize h) (_serialize_la ps_a t);
-        ps_a.parse_serialize_inv h;
-        bytes_slice_whole (ps_a.serialize h);
-        ps_a.parse_no_lookahead (ps_a.serialize h) (serialize_la (h::t));
-        parse_serialize_inv_la t
-      )
+      ps_a.parse_serialize_inv h (serialize_la t);
+      let suffix = (_serialize_la ps_a t) in
+      assume(bytes_length suffix < bytes_length (serialize_la l));
+      parse_serialize_inv_la t
   in
   let rec serialize_parse_inv_la (buf:bytes): Lemma (ensures (match parse_la buf with | None -> True | Some l -> serialize_la l == buf)) (decreases (bytes_length buf)) =
     if bytes_length buf = 0 then (
       bytes_length_zero buf
     ) else (
-      match parse_la buf with
-      | None -> ()
-      | Some l ->
-        let (h, len) = Some?.v (ps_a.parse buf) in
-        let t = Some?.v (parse_la (delete_prefix buf len)) in
-        ps_a.serialize_parse_inv buf;
-        serialize_parse_inv_la (delete_prefix buf len);
-        bytes_concat_slice buf len
+       match parse_la buf with
+       | None -> ()
+       | Some l ->
+         let (_, suffix) = Some?.v (ps_a.parse buf) in
+         ps_a.serialize_parse_inv buf;
+         serialize_parse_inv_la suffix
     )
   in
   {
