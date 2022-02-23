@@ -1,5 +1,9 @@
 module MLS.Bytes
 
+open FStar.Mul
+
+type nat_lbytes (sz:nat) = n:nat{n < pow2 (8*sz)}
+
 class bytes_like (bytes:Type0) = {
   length: bytes -> nat;
 
@@ -14,27 +18,40 @@ class bytes_like (bytes:Type0) = {
 
   concat_empty_left: b:bytes -> Lemma (concat empty b == b);
 
-  slice: b:bytes -> i:nat -> j:nat{i <= j /\ j <= length b} -> bytes;
-  slice_length: b:bytes -> i:nat -> j:nat{i <= j /\ j <= length b} -> Lemma (length (slice b i j) == j-i);
+  slice: b:bytes -> i:nat -> j:nat{i <= j /\ j <= length b} -> option bytes;
+  slice_length: b:bytes -> i:nat -> j:nat{i <= j /\ j <= length b} -> Lemma (
+    match slice b i j with
+    | Some res -> length res == j-i
+    | None -> True
+  );
 
   slice_concat_left: b1:bytes -> b2:bytes -> Lemma
     (requires (length b1) <= (length (concat b1 b2)))
-    (ensures slice (concat b1 b2) 0 (length b1) == b1);
+    (ensures slice (concat b1 b2) 0 (length b1)  == Some b1);
   slice_concat_right: b1:bytes -> b2:bytes -> Lemma
     (requires (length b1) <= (length (concat b1 b2)))
-    (ensures slice (concat b1 b2) (length b1) (length (concat b1 b2)) == b2);
+    (ensures slice (concat b1 b2) (length b1) (length (concat b1 b2)) == Some b2);
 
-  //TODO: is this lemma true on symbolic bytes?
-  //It is only used for `serialize_parse_inv` of `ps_lbytes`
-  //A workaround could probably live with `slice` that returns an option?
-  concat_slice: b:bytes -> i:nat{i <= length b} -> Lemma
-    (concat (slice b 0 i) (slice b i (length b)) == b);
+  concat_slice: b:bytes -> i:nat{i <= length b} -> Lemma (
+    match slice b 0 i, slice b i (length b) with
+    | Some lhs, Some rhs -> concat lhs rhs == b
+    | _ -> True
+  );
 
-  //is_public: bytes -> Type0;
-  //to_nat: b:bytes{is_public b} -> nat;
-  //from_nat: nat -> b:bytes{is_public b};
+  to_nat: sz:nat -> b:bytes{length b == sz} -> option (nat_lbytes sz);
+  from_nat: sz:nat -> nat_lbytes sz -> b:bytes{length b == sz};
+
+  from_to_nat: sz:nat -> n:nat_lbytes sz -> Lemma
+    (to_nat sz (from_nat sz n) == Some n);
+
+  to_from_nat: sz:nat -> b:bytes{length b == sz} -> Lemma (
+    match to_nat sz b with
+    | Some n -> b == from_nat sz n
+    | None -> True
+  );
 }
 
+(*
 open FStar.Seq
 
 instance seq_bytes_like (a:Type0): bytes_like (Seq.seq a) =
@@ -58,3 +75,4 @@ instance seq_bytes_like (a:Type0): bytes_like (Seq.seq a) =
 
     concat_slice = (fun b i -> assert(Seq.equal (Seq.append (Seq.slice b 0 i) (Seq.slice b i (Seq.length b))) b));
   }
+*)

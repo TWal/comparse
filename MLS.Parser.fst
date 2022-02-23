@@ -98,11 +98,11 @@ let bind #a #b #bytes ps_a ps_b =
     let lb = (ps_b xa).serialize xb in
     la@lb
   in
-  let lemma_not_unit (): Lemma((parse_ab empty == None) <==> (ps_a.parse empty == None) \/ (forall xa. (ps_b xa).parse empty == None)) = begin
-    match ps_a.parse empty with
+  let lemma_not_unit (): Lemma((parse_ab (empty <: bytes) == None) <==> (ps_a.parse (empty <: bytes) == None) \/ (forall xa. (ps_b xa).parse (empty <: bytes) == None)) = begin
+    match ps_a.parse (empty <: bytes) with
     | None -> ()
     | Some (xa, empty_suffix) -> (
-      ps_a.serialize_parse_inv empty;
+      ps_a.serialize_parse_inv (empty <: bytes);
       add_prefixes_length (ps_a.serialize xa) empty_suffix;
       empty_length #bytes ();
       length_zero empty_suffix;
@@ -153,7 +153,7 @@ let isomorphism_explicit #a #bytes b ps_a f g g_f_inv f_g_inv =
   let serialize_b xb =
     ps_a.serialize (g xb)
   in
-  {
+  let res = {
     parse = parse_b;
     serialize = serialize_b;
     parse_serialize_inv = (fun (x:b) ->
@@ -168,7 +168,8 @@ let isomorphism_explicit #a #bytes b ps_a f g g_f_inv f_g_inv =
       )
       | None -> ()
     );
-  }
+  } in
+  res
 
 let isomorphism #a b ps_a f g =
   isomorphism_explicit #a b ps_a f g (fun _ -> ()) (fun _ -> ())
@@ -191,9 +192,9 @@ let ps_lbytes #bytes #bl n =
       None
     else (
       slice_length buf 0 n;
-      let x = slice #bytes #bl buf 0 n in
-      let suffix = slice #bytes #bl buf n (length buf) in
-      Some (x, suffix)
+      match slice #bytes #bl buf 0 n, slice #bytes #bl buf n (length buf) with
+      | Some x, Some suffix -> Some (x, suffix)
+      | _ -> None
     )
   in
   let serialize_lbytes (b:lbytes bytes n): list bytes =
@@ -217,6 +218,36 @@ let ps_lbytes #bytes #bl n =
     );
   }
 #pop-options
+
+
+val ps_uint: #bytes:Type0 -> {|bytes_like bytes|} -> sz:pos -> parser_serializer bytes (nat_lbytes sz)
+let ps_uint #bytes #bl sz =
+  let parse_uint (buf:bytes): option (nat_lbytes sz & bytes) =
+    match (ps_lbytes sz).parse buf with
+    | Some (x, suffix) -> (
+      match to_nat sz (x <: bytes) with
+      | Some n -> Some (n, suffix)
+      | None -> None
+    )
+    | None -> None
+  in
+  let serialize_uint (n:nat_lbytes sz): list bytes =
+    (ps_lbytes sz).serialize (from_nat sz n <: bytes)
+  in
+  {
+    parse = parse_uint;
+    serialize = serialize_uint;
+    parse_serialize_inv = (fun n suffix ->
+      from_to_nat #bytes sz n;
+      (ps_lbytes sz).parse_serialize_inv (from_nat sz n <: bytes) suffix
+    );
+    serialize_parse_inv = (fun (buf:bytes) ->
+      (ps_lbytes sz).serialize_parse_inv buf;
+      match (ps_lbytes sz).parse buf with
+      | Some (x, suffix) -> to_from_nat #bytes sz x
+      | None -> ()
+    );
+  }
 
 (*
 val ps_uint: t:IT.inttype{IT.unsigned t /\ ~(IT.U1? t)} -> parser_serializer (IT.uint_t t IT.SEC)
@@ -248,7 +279,8 @@ let ps_to_pse #bytes #bl #a ps_a =
       else
         None
   in
-  let serialize_exact_a (x:a) =
+  let serialize_exact_a (x:a): b:bytes =
+    ps_a.parse_serialize_inv x empty;
     add_prefixes (ps_a.serialize x) empty
   in
   {
@@ -269,17 +301,18 @@ let ps_to_pse #bytes #bl #a ps_a =
     );
   }
 
-//The two following functions are defined here because F* can't reason on recursive functions defined inside a function
-val _parse_la: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> parser_serializer bytes a -> buf:bytes -> Tot (option (list a)) (decreases (length buf))
+//The following functions are defined here because F* can't reason on recursive functions defined inside a function
+#push-options "--fuel 1"
+val _parse_la: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:parser_serializer bytes a -> buf:bytes -> Tot (option (list a)) (decreases (length (buf <: bytes)))
 let rec _parse_la #bytes #bl #a ps_a buf =
-  if length buf = 0 then (
+  if length (buf <: bytes) = 0 then (
     Some []
   ) else (
-    match ps_a.parse buf with
+    match ps_a.parse (buf <: bytes) with
     | None -> None
     | Some (h, suffix) -> begin
-      if length suffix >= length buf then (
-        None //Impossible case
+      if length suffix >= length (buf <: bytes) then (
+        None //Impossible case, but no need to prove it here
       ) else (
         match _parse_la ps_a suffix with
         | None -> None
@@ -287,8 +320,10 @@ let rec _parse_la #bytes #bl #a ps_a buf =
       )
     end
   )
+#pop-options
 
-val _serialize_la: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> parser_serializer bytes a -> l:list a -> bytes
+#push-options "--fuel 1"
+val _serialize_la: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:parser_serializer bytes a -> l:list a -> bytes
 let rec _serialize_la #bytes #bl #a ps_a l =
   match l with
   | [] -> empty
@@ -298,7 +333,7 @@ let rec _serialize_la #bytes #bl #a ps_a l =
 #push-options "--fuel 1"
 let pse_list #bytes #bl #a ps_a =
   let parse_la (buf:bytes) = _parse_la ps_a buf in
-  let serialize_la (l:list a) = _serialize_la ps_a l in
+  let serialize_la (l:list a): bytes = _serialize_la ps_a l in
   let rec parse_serialize_inv_la (l:list a): Lemma (parse_la (serialize_la l) == Some l) =
     match l with
     | [] -> empty_length #bytes ()
@@ -314,9 +349,9 @@ let pse_list #bytes #bl #a ps_a =
         parse_serialize_inv_la t
       )
   in
-  let rec serialize_parse_inv_la (buf:bytes): Lemma (ensures (match parse_la buf with | None -> True | Some l -> serialize_la l == buf)) (decreases (length buf)) =
-    if length buf = 0 then (
-      length_zero buf
+  let rec serialize_parse_inv_la (buf:bytes): Lemma (ensures (match parse_la buf with | None -> True | Some l -> serialize_la l == buf)) (decreases (length (buf <: bytes))) =
+    if length (buf <: bytes) = 0 then (
+      length_zero (buf <: bytes)
     ) else (
        match parse_la buf with
        | None -> ()
@@ -339,140 +374,93 @@ let pse_list #bytes #bl #a ps_a =
 
 type nat_in_range (r:size_range) = n:nat{in_range r n}
 
-val ps_nat_in_range: r:size_range -> parser_serializer (nat_in_range r)
-let ps_nat_in_range r =
-  let size_int_type =
-    if r.max < pow2 8 then IT.uint8
-    else if r.max < pow2 16 then IT.uint16
-    else if r.max < pow2 32 then IT.uint32
-    else IT.uint64
+val ps_nat_in_range: #bytes:Type0 -> {|bytes_like bytes|} -> r:size_range -> parser_serializer bytes (nat_in_range r)
+let ps_nat_in_range #bytes #bl r =
+  let sz =
+    if r.max < pow2 8 then 1
+    else if r.max < pow2 16 then 2
+    else if r.max < pow2 32 then 4
+    else 8
   in
-  let ps_it: parser_serializer size_int_type =
-    if r.max < pow2 8 then ps_u8
-    else if r.max < pow2 16 then ps_u16
-    else if r.max < pow2 32 then ps_u32
-    else ps_u64
-  in
-  let nat_to_it (n:nat_in_range r): size_int_type =
-    if r.max < pow2 8 then IT.u8 n
-    else if r.max < pow2 16 then IT.u16 n
-    else if r.max < pow2 32 then IT.u32 n
-    else IT.u64 n
-  in
-  let it_to_nat (n:size_int_type): nat =
-    if r.max < pow2 8 then IT.v #IT.U8 #IT.SEC n
-    else if r.max < pow2 16 then IT.v #IT.U16 #IT.SEC n
-    else if r.max < pow2 32 then IT.v #IT.U32 #IT.SEC n
-    else IT.v #IT.U64 #IT.SEC n
-  in
-  let parse (buf:bytes): option (nat_in_range r & consumed_length buf) =
-    match ps_it.parse buf with
+  let parse (buf:bytes): option (nat_in_range r & bytes) =
+    match (ps_uint sz).parse buf with
     | None -> None
-    | Some (n_it, len) ->
-      let n_nat = it_to_nat n_it in
-      if in_range r n_nat then
-        Some (n_nat, len)
+    | Some (n, suffix) ->
+      if in_range r n then
+        Some (n, suffix)
       else
         None
   in
-  let serialize (n:nat_in_range r): bytes =
-    ps_it.serialize (nat_to_it n)
+  let serialize (n:nat_in_range r): list bytes =
+    (ps_uint #bytes sz).serialize n
   in
   {
     parse = parse;
     serialize = serialize;
-    parse_serialize_inv = (fun x ->
-      ps_it.parse_serialize_inv (nat_to_it x)
+    parse_serialize_inv = (fun x suffix ->
+      (ps_uint sz).parse_serialize_inv x suffix
     );
     serialize_parse_inv = (fun (buf:bytes) ->
-      ps_it.serialize_parse_inv buf
+      (ps_uint sz).serialize_parse_inv buf
     );
-    parse_no_lookahead = (fun (b1 b2:bytes) ->
-      match parse b1 with
-      | None -> ()
-      | Some _ -> ps_it.parse_no_lookahead b1 b2
-    )
   }
 
-#push-options "--z3rlimit 20"
-val parser_serializer_exact_to_parser_serializer: #a:Type -> r:size_range -> pse_a:parser_serializer_exact a{forall x. in_range r (bytes_length (pse_a.serialize_exact x))} -> parser_serializer a
-let parser_serializer_exact_to_parser_serializer #a r pse_a =
+val parser_serializer_exact_to_parser_serializer: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> r:size_range -> pse_a:parser_serializer_exact bytes a{forall x. in_range r (length (pse_a.serialize_exact x))} -> parser_serializer bytes a
+let parser_serializer_exact_to_parser_serializer #bytes #bl #a r pse_a =
   let ps_nat = ps_nat_in_range r in
   let parse_a (buf:bytes) =
     match ps_nat.parse buf with
     | None -> None
-    | Some (sz, l) -> begin
-      let buf2 = delete_prefix buf l in
-      if bytes_length buf2 < sz then (
-        None
-      ) else (
-        match pse_a.parse_exact (bytes_slice buf2 0 sz) with
+    | Some (sz, suffix) -> begin
+      match (ps_lbytes sz).parse suffix with
+      | None -> None
+      | Some (x_lbytes, suffix2) -> begin
+        match pse_a.parse_exact x_lbytes with
         | None -> None
-        | Some x -> Some (x, ((l + sz) <: consumed_length buf))
-      )
+        | Some x_a -> Some (x_a, suffix2)
+      end
     end
   in
-  let serialize_a (x_a:a): bytes =
+  let serialize_a (x_a:a): list bytes =
     let x_serialized = pse_a.serialize_exact x_a in
-    bytes_append (ps_nat.serialize (bytes_length x_serialized)) x_serialized
+    (ps_nat.serialize (length x_serialized)) @ [x_serialized]
   in
   {
     parse = parse_a;
     serialize = serialize_a;
-    parse_serialize_inv = (fun x ->
-      let x_serialized = pse_a.serialize_exact x in
-      let x_sz = bytes_length (x_serialized) in
-      let l = bytes_length (ps_nat.serialize x_sz) in
-      ps_nat.parse_no_lookahead (ps_nat.serialize x_sz) (serialize_a x);
-      ps_nat.parse_serialize_inv x_sz;
-      pse_a.parse_serialize_inv_exact x;
-      assert (bytes_equal (bytes_slice (delete_prefix (serialize_a x) l) 0 (bytes_length x_serialized)) x_serialized)
+    parse_serialize_inv = (fun x_a suffix ->
+      let x_serialized = pse_a.serialize_exact x_a in
+      let sz = (length x_serialized) in
+      ps_nat.parse_serialize_inv sz (add_prefixes [x_serialized] suffix);
+      add_prefixes_add_prefixes (ps_nat.serialize sz) [x_serialized] suffix;
+      pse_a.parse_serialize_inv_exact x_a;
+      (ps_lbytes sz).parse_serialize_inv x_serialized suffix
     );
     serialize_parse_inv = (fun (buf:bytes) ->
       match parse_a buf with
       | None -> ()
-      | Some (x, l) ->
-        let (sz, l) = Some?.v (ps_nat.parse buf) in
+      | Some (x_a, suffix) ->
+        let (sz, suffix) = Some?.v (ps_nat.parse buf) in
+        let (x_lbytes, suffix2) = Some?.v ((ps_lbytes sz).parse suffix) in
+        let x_a = Some?.v (pse_a.parse_exact x_lbytes) in
         ps_nat.serialize_parse_inv buf;
-        pse_a.serialize_parse_inv_exact (bytes_slice (delete_prefix buf l) 0 sz);
-        assert (bytes_equal (bytes_slice buf 0 (l+sz)) (serialize_a x))
-    );
-    parse_no_lookahead = (fun (b1 b2:bytes) ->
-      match parse_a b1 with
-      | None -> ()
-      | Some (x, len) ->
-        ps_nat.parse_no_lookahead b1 b2;
-        let (sz, l) = Some?.v (ps_nat.parse b1) in
-        assert (bytes_equal (bytes_slice (delete_prefix b1 l) 0 sz) (bytes_slice (delete_prefix b2 l) 0 sz))
+        (ps_lbytes sz).serialize_parse_inv suffix;
+        pse_a.serialize_parse_inv_exact x_lbytes;
+        add_prefixes_add_prefixes (ps_nat.serialize sz) [x_lbytes] suffix2
     )
   }
-#pop-options
 
-type bllist (a:Type) (ps_a:parser_serializer a) (r:size_range) = l:list a{in_range r (byte_length ps_a l)}
+type bllist (#bytes:Type0) {|bytes_like bytes|} (a:Type) (ps_a:parser_serializer bytes a) (r:size_range) = l:list a{in_range r (bytes_length ps_a l)}
 
-#push-options "--fuel 1"
-val byte_length_lemma: #a:Type -> ps_a:parser_serializer a -> l:list a -> Lemma
-  (byte_length ps_a l == bytes_length ((pse_list ps_a).serialize_exact l))
-  [SMTPat (bytes_length ((pse_list ps_a).serialize_exact l))]
-let rec byte_length_lemma #a ps_a l =
-  //Why is this needed?
-  assert_norm(forall x. (pse_list ps_a).serialize_exact x == _serialize_la ps_a x);
-  match l with
-  | [] -> ()
-  | h::t -> byte_length_lemma ps_a t
-#pop-options
-
-
-val ps_list: #a:Type -> r:size_range -> ps_a:parser_serializer a -> parser_serializer (bllist a ps_a r)
-let ps_list #a r ps_a =
+val ps_list: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> r:size_range -> ps_a:parser_serializer bytes a -> parser_serializer bytes (bllist a ps_a r)
+let ps_list #bytes #bl #a r ps_a =
   let pse_la = pse_list ps_a in
-  let pse_bllist_a: parser_serializer_exact (bllist a ps_a r) =
+  let pse_bllist_a: parser_serializer_exact bytes (bllist a ps_a r) =
     {
       parse_exact = (fun buf ->
-        if in_range r (bytes_length buf) then
+        if in_range r (length buf) then
           match pse_la.parse_exact buf with
           | Some x ->
-            byte_length_lemma ps_a x;
             pse_la.serialize_parse_inv_exact buf;
             Some (x <: bllist a ps_a r)
           | None -> None
@@ -483,35 +471,39 @@ let ps_list #a r ps_a =
         (pse_list ps_a).serialize_exact x
       );
       parse_serialize_inv_exact = (fun x ->
-        pse_la.parse_serialize_inv_exact x;
-        byte_length_lemma ps_a x
+        pse_la.parse_serialize_inv_exact x
       );
       serialize_parse_inv_exact = (fun buf -> pse_la.serialize_parse_inv_exact buf);
     }
   in
   parser_serializer_exact_to_parser_serializer r pse_bllist_a
 
-let ps_seq #a r ps_a =
-  FStar.Classical.forall_intro (bytes_lemma_list_seq_bij #a);
-  FStar.Classical.forall_intro (bytes_lemma_seq_list_bij #a);
+let ps_seq #bytes #bl #a r ps_a =
+  FStar.Classical.forall_intro (Seq.lemma_list_seq_bij #a);
+  FStar.Classical.forall_intro (Seq.lemma_seq_list_bij #a);
   isomorphism
     (blseq a ps_a r)
     (ps_list r ps_a)
-    (fun l -> bytes_seq_of_list l)
-    (fun s -> bytes_seq_to_list s)
+    (fun l -> Seq.seq_of_list l)
+    (fun s -> Seq.seq_to_list s)
 
-#push-options "--fuel 1"
-let ps_bytes r =
-  let rec lemma (b:bytes): Lemma (ensures byte_length ps_u8 (bytes_seq_to_list b) == bytes_length b) (decreases (bytes_length b)) [SMTPat (byte_length ps_u8 (bytes_seq_to_list b))] =
-    if bytes_length b = 0 then (
-      ()
-    ) else (
-      lemma (bytes_slice b 1 (bytes_length b))
-    )
+let ps_bytes #bytes #bl r =
+  let parse_bytes (buf:bytes): option (blbytes bytes r) =
+    if in_range r (length (buf <: bytes)) then
+      Some buf
+    else
+      None
   in
-  isomorphism
-    (blbytes r)
-    (ps_seq r ps_u8)
-    (fun s -> s)
-    (fun b -> b)
-#pop-options
+  let serialize_bytes (buf:blbytes bytes r): bytes =
+    buf
+  in
+  let pse_bytes: parser_serializer_exact bytes (blbytes bytes r)=
+    {
+      parse_exact = parse_bytes;
+      serialize_exact = serialize_bytes;
+      parse_serialize_inv_exact = (fun _ -> ());
+      serialize_parse_inv_exact = (fun _ -> ());
+    }
+  in
+  parser_serializer_exact_to_parser_serializer r pse_bytes
+

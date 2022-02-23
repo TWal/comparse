@@ -6,9 +6,6 @@ open MLS.Bytes
 
 val add_prefixes: #bytes:Type0 -> {|bytes_like bytes|} -> list bytes -> bytes -> bytes
 
-type bare_parser (bytes:Type0) {|bytes_like bytes|} (a:Type) = b:bytes -> option (a & bytes)
-type bare_serializer (bytes:Type0) {|bytes_like bytes|} (a:Type) = x:a -> list bytes
-
 /// What is the reason behind `parser_serializer_unit` and `parser_serializer`?
 /// In some functions (such as `pse_list` which is used to build `ps_seq` or `ps_bytes`),
 /// it is useful to know that `parse` will never consume 0 bytes, and `serialize` will never return `bytes_empty`.
@@ -28,8 +25,8 @@ type bare_serializer (bytes:Type0) {|bytes_like bytes|} (a:Type) = x:a -> list b
 /// because `parser_serializer_nonempty` is ugly, and it's the type that is the most used by the user.
 
 noeq type parser_serializer_unit (bytes:Type0) {|bytes_like bytes|} (a:Type) = {
-  parse: bare_parser bytes a;
-  serialize: bare_serializer bytes a;
+  parse: bytes -> option (a & bytes);
+  serialize: a -> list bytes;
   parse_serialize_inv: x:a -> suffix:bytes -> Lemma (
     parse (add_prefixes (serialize x) suffix) == Some (x, suffix)
   );
@@ -67,7 +64,9 @@ val isomorphism:
 val ps_unit: #bytes:Type0 -> {| bytes_like bytes |} -> parser_serializer_unit bytes unit
 
 type lbytes (bytes:Type0) {|bytes_like bytes|} (n:nat) = b:bytes{length b == n}
-val ps_lbytes: #bytes:Type0 -> {| bytes_like bytes |} -> n:nat{1 <= n} -> parser_serializer bytes (lbytes bytes n)
+val ps_lbytes: #bytes:Type0 -> {| bytes_like bytes |} -> n:nat -> Pure (parser_serializer_unit bytes (lbytes bytes n))
+  (requires True)
+  (ensures fun res -> 1 <= n ==> is_not_unit res)
 
 //val ps_u8: parser_serializer uint8
 //val ps_u16: parser_serializer uint16
@@ -77,11 +76,9 @@ val ps_lbytes: #bytes:Type0 -> {| bytes_like bytes |} -> n:nat{1 <= n} -> parser
 
 (*** Exact parsers ***)
 
-type bare_parser_exact (bytes:Type0) {|bytes_like bytes|} (a:Type) = b:bytes -> option a
-type bare_serializer_exact (bytes:Type0) {|bytes_like bytes|} (a:Type) = a -> bytes
 noeq type parser_serializer_exact (bytes:Type0) {|bytes_like bytes|} (a:Type) = {
-  parse_exact: bare_parser_exact bytes a;
-  serialize_exact: bare_serializer_exact bytes a;
+  parse_exact: bytes -> option a;
+  serialize_exact: a -> bytes;
   parse_serialize_inv_exact: x:a -> Lemma (
     parse_exact (serialize_exact x) == Some x
   );
@@ -105,12 +102,10 @@ type size_range = {
 let in_range (r:size_range) (x:nat) =
   r.min <= x && x <= r.max
 
-let rec byte_length (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a) (l:list a) : nat =
-  match l with
-  | [] -> 0
-  | h::t -> length (add_prefixes (ps_a.serialize h) empty <: bytes) + byte_length ps_a t
+let bytes_length (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a) (l:list a) : nat =
+  length ((pse_list ps_a).serialize_exact l)
 
-type blseq (#bytes:Type0) {|bytes_like bytes|} (a:Type) (ps_a:parser_serializer bytes a) (r:size_range) = s:Seq.seq a{in_range r (byte_length ps_a (Seq.seq_to_list s))}
+type blseq (#bytes:Type0) {|bytes_like bytes|} (a:Type) (ps_a:parser_serializer bytes a) (r:size_range) = s:Seq.seq a{in_range r (bytes_length ps_a (Seq.seq_to_list s))}
 type blbytes (bytes:Type0) {|bytes_like bytes|} (r:size_range) = b:bytes{in_range r (length b)}
 val ps_seq: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> r:size_range -> ps_a:parser_serializer bytes a -> parser_serializer bytes (blseq a ps_a r)
 val ps_bytes: #bytes:Type0 -> {|bytes_like bytes|} -> r:size_range -> parser_serializer bytes (blbytes bytes r)
