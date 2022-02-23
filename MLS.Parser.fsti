@@ -1,11 +1,10 @@
 module MLS.Parser
 
-open Lib.ByteSequence
-open Lib.IntTypes
+open MLS.Bytes
 
 (*** Basic definitions ***)
 
-type consumed_length (b:bytes) = n:nat{n <= Seq.length b}
+type consumed_length (b:bytes) = n:nat{n <= bytes_length b}
 type bare_parser (a:Type) = b:bytes -> option (a & consumed_length b)
 type bare_serializer (a:Type) = a -> bytes
 
@@ -31,17 +30,17 @@ noeq type parser_serializer_unit (a:Type) = {
   parse: bare_parser a;
   serialize: bare_serializer a;
   parse_serialize_inv: x:a -> Lemma (
-    parse (serialize x) == Some (x, Seq.length (serialize x))
+    parse (serialize x) == Some (x, bytes_length (serialize x))
   );
   serialize_parse_inv: buf:bytes -> Lemma (
     match parse buf with
-    | Some (x, l) ->  serialize x == (Seq.slice buf 0 l)
+    | Some (x, l) ->  serialize x == (bytes_slice buf 0 l)
     | None -> True
   );
   parse_no_lookahead: b1:bytes -> b2:bytes -> Lemma
     (requires (
       match parse b1 with
-      | Some (_, l) -> l <= Seq.length b2 /\ (forall (i:nat). i < l ==> Seq.index b1 i == Seq.index b2 i)
+      | Some (_, l) -> l <= bytes_length b2 /\ (bytes_slice b1 0 l == bytes_slice b2 0 l)
       | None -> True
     ))
     (ensures (
@@ -54,6 +53,25 @@ noeq type parser_serializer_unit (a:Type) = {
       | None -> True
     ))
 }
+
+(*
+val is_valid_slice: bytes -> i:nat{i < bytes_length} -> bool
+
+val length_is_valid_slice: b1:bytes -> b2:bytes -> Lemma
+  (is_valid_slice (concat b1 b2) (length b1))
+
+bytes_slice b i j
+i = 0 /\ is_valid_slice j
+is_valid_slice i /\ j = bytes_length b
+
+i1 i2 i3 i3
+
+is_valid_slice b i1
+is_valid_slice (slice b i1 len) i2
+is_valid_slice (slice b i1 len) i2
+
+is_valid_extended b i2 -> exists. suite i, ça marche
+*)
 
 let is_not_unit (#a:Type) (ps_a:parser_serializer_unit a) = ps_a.parse bytes_empty == None
 let parser_serializer (a:Type) = ps_a:parser_serializer_unit a{is_not_unit ps_a}
@@ -75,13 +93,13 @@ val isomorphism: #a:Type -> b:Type -> ps_a:parser_serializer_unit a -> f:(a -> b
 
 val ps_unit: parser_serializer_unit unit
 
-val ps_lbytes: n:size_nat{1 <= n} -> parser_serializer (lbytes n)
+val ps_lbytes: n:nat{1 <= n} -> parser_serializer (lbytes n)
 
-val ps_u8: parser_serializer uint8
-val ps_u16: parser_serializer uint16
-val ps_u32: parser_serializer uint32
-val ps_u64: parser_serializer uint64
-val ps_u128: parser_serializer uint128
+//val ps_u8: parser_serializer uint8
+//val ps_u16: parser_serializer uint16
+//val ps_u32: parser_serializer uint32
+//val ps_u64: parser_serializer uint64
+//val ps_u128: parser_serializer uint128
 
 (*** Exact parsers ***)
 
@@ -116,9 +134,9 @@ let in_range (r:size_range) (x:nat) =
 let rec byte_length (#a:Type) (ps_a:parser_serializer a) (l:list a) : nat =
   match l with
   | [] -> 0
-  | h::t -> Seq.length (ps_a.serialize h) + byte_length ps_a t
+  | h::t -> bytes_length (ps_a.serialize h) + byte_length ps_a t
 
 type blseq (a:Type) (ps_a:parser_serializer a) (r:size_range) = s:Seq.seq a{in_range r (byte_length ps_a (Seq.seq_to_list s))}
-type blbytes (r:size_range) = b:bytes{in_range r (Seq.length b)}
+type blbytes (r:size_range) = b:bytes{in_range r (bytes_length b)}
 val ps_seq: #a:Type -> r:size_range -> ps_a:parser_serializer a -> parser_serializer (blseq a ps_a r)
 val ps_bytes: r:size_range -> parser_serializer (blbytes r)
