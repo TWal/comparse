@@ -24,6 +24,9 @@ class bytes_like (bytes:Type0) = {
     (requires (length b1) <= (length (concat b1 b2)))
     (ensures slice (concat b1 b2) (length b1) (length (concat b1 b2)) == b2);
 
+  //TODO: is this lemma true on symbolic bytes?
+  //It is only used for `serialize_parse_inv` of `ps_lbytes`
+  //A workaround could probably live with `slice` that returns an option?
   concat_slice: b:bytes -> i:nat{i <= length b} -> Lemma
     (concat (slice b 0 i) (slice b i (length b)) == b);
 

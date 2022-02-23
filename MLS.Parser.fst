@@ -20,29 +20,6 @@ let rec add_prefixes_add_prefixes l1 l2 suffix =
   | h::t -> add_prefixes_add_prefixes t l2 suffix
 #pop-options
 
-val is_suffix_transitive: #bytes:Type0 -> {|bytes_like bytes|} -> b1:bytes -> b2:bytes -> b3:bytes -> Lemma
-  (requires is_suffix b1 b2 /\ is_suffix b2 b3)
-  (ensures is_suffix b1 b3)
-let is_suffix_transitive b1 b2 b3 =
-  eliminate exists l1. b2 == add_prefixes l1 b1
-  returns _
-  with _.
-  eliminate exists l2. b3 == add_prefixes l2 b2
-  returns is_suffix b1 b3
-  with _. add_prefixes_add_prefixes l2 l1 b1
-
-val is_suffix_explicit_to_implicit: #bytes:Type0 -> {|bytes_like bytes|} -> b1:bytes -> b2:bytes -> l:list bytes -> Lemma
-  (requires b2 == add_prefixes l b1)
-  (ensures is_suffix b1 b2)
-let is_suffix_explicit_to_implicit b1 b2 l =
-  ()
-
-#push-options "--fuel 1 --ifuel 1"
-val is_suffix_reflexive: #bytes:Type0 -> {|bytes_like bytes|} -> b:bytes -> Lemma (is_suffix b b)
-let is_suffix_reflexive b =
-  is_suffix_explicit_to_implicit b b []
-#pop-options
-
 #push-options "--fuel 1 --ifuel 1"
 val add_prefixes_length: #bytes:Type0 -> {|bytes_like bytes|} -> l:list bytes -> suffix:bytes -> Lemma
   (length suffix <= length (add_prefixes l suffix))
@@ -53,14 +30,6 @@ let rec add_prefixes_length #bytes #bl l suffix =
     add_prefixes_length t suffix;
     concat_length h (add_prefixes t suffix)
 #pop-options
-
-val is_suffix_length: #bytes:Type0 -> {|bytes_like bytes|} -> b1:bytes -> b2:bytes -> Lemma
-  (requires is_suffix b1 b2)
-  (ensures length b1 <= length b2)
-let is_suffix_length b1 b2 =
-  eliminate exists l1. b2 == add_prefixes l1 b1
-  returns length b1 <= length b2
-  with _. add_prefixes_length l1 b1
 
 val prefixes_is_empty: #bytes:Type0 -> {|bytes_like bytes|} -> list bytes -> bool
 let prefixes_is_empty l = List.Tot.for_all (fun b -> length b = 0) l
@@ -112,14 +81,13 @@ let rec add_prefixes_length_strict #bytes #bl l suffix =
 (*** Parser combinators ***)
 
 let bind #a #b #bytes ps_a ps_b =
-  let parse_ab (buf:bytes): option ((xa:a&(b xa)) & suffix_of buf) =
+  let parse_ab (buf:bytes): option ((xa:a&(b xa)) & bytes) =
     match ps_a.parse buf with
     | None -> None
     | Some (xa, buf_suffix) -> begin
       match (ps_b xa).parse buf_suffix with
       | None -> None
       | Some (xb, buf_suffix_suffix) -> (
-        is_suffix_transitive buf_suffix_suffix buf_suffix buf;
         Some ((|xa, xb|), buf_suffix_suffix)
       )
     end
@@ -134,15 +102,15 @@ let bind #a #b #bytes ps_a ps_b =
     match ps_a.parse empty with
     | None -> ()
     | Some (xa, empty_suffix) -> (
-      is_suffix_length (empty_suffix <: bytes) empty;
+      ps_a.serialize_parse_inv empty;
+      add_prefixes_length (ps_a.serialize xa) empty_suffix;
       empty_length #bytes ();
-      length_zero (empty_suffix <: bytes);
+      length_zero empty_suffix;
       introduce forall x. x == xa with (
         ps_a.parse_serialize_inv xa (add_prefixes (ps_a.serialize x) empty);
         let l_xa = ps_a.serialize xa in
         let l_x = ps_a.serialize x in
         add_prefixes_add_prefixes l_xa l_x empty;
-        ps_a.serialize_parse_inv empty;
         add_prefixes_identity (l_xa) empty;
         add_prefixes_add_prefixes l_xa l_x empty;
         add_prefixes_identity_inv (l_xa) (add_prefixes l_x empty);
@@ -208,12 +176,8 @@ let isomorphism #a b ps_a f g =
 (*** Parser for basic types ***)
 
 let ps_unit #bytes #bl =
-  //Needed for `parse`, don't know why
-  let f (b:bytes): suffix_of b =
-    is_suffix_reflexive b; b
-  in
   {
-    parse = (fun b -> Some ((), f b));
+    parse = (fun b -> Some ((), b));
     serialize = (fun _ -> []);
     parse_serialize_inv = (fun _ b -> assert_norm(add_prefixes [] b == b));
     serialize_parse_inv = (fun buf -> assert_norm(add_prefixes [] buf == buf));
@@ -222,15 +186,13 @@ let ps_unit #bytes #bl =
 //WHY THE #bytes #bl EVERYWHERE?????
 #push-options "--fuel 2"
 let ps_lbytes #bytes #bl n =
-  let parse_lbytes (buf:bytes): option (lbytes bytes n & suffix_of buf) =
+  let parse_lbytes (buf:bytes): option (lbytes bytes n & bytes) =
     if length buf < n then
       None
     else (
       slice_length buf 0 n;
       let x = slice #bytes #bl buf 0 n in
       let suffix = slice #bytes #bl buf n (length buf) in
-      concat_slice buf n;
-      is_suffix_explicit_to_implicit suffix buf [x];
       Some (x, suffix)
     )
   in
@@ -281,8 +243,7 @@ let ps_to_pse #bytes #bl #a ps_a =
     match ps_a.parse buf with
     | None -> None
     | Some (x, suffix) ->
-      //TODO remove <:
-      if length (suffix <: bytes) = 0 then
+      if length suffix = 0 then
         Some x
       else
         None
@@ -303,7 +264,7 @@ let ps_to_pse #bytes #bl #a ps_a =
       | Some _ -> (
         let (x, suffix) = Some?.v (ps_a.parse buf) in
         ps_a.serialize_parse_inv buf;
-        length_zero (suffix <: bytes) //TODO
+        length_zero suffix
       )
     );
   }
@@ -317,8 +278,7 @@ let rec _parse_la #bytes #bl #a ps_a buf =
     match ps_a.parse buf with
     | None -> None
     | Some (h, suffix) -> begin
-      //TODO <:
-      if length (suffix <: bytes) >= length buf then (
+      if length suffix >= length buf then (
         None //Impossible case
       ) else (
         match _parse_la ps_a suffix with

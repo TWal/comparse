@@ -5,13 +5,8 @@ open MLS.Bytes
 (*** Basic definitions ***)
 
 val add_prefixes: #bytes:Type0 -> {|bytes_like bytes|} -> list bytes -> bytes -> bytes
-let is_suffix (#bytes:Type0) {|bytes_like bytes|} (suffix:bytes) (buf:bytes) = exists prefixes. buf == add_prefixes prefixes suffix
 
-type suffix_of (#bytes:Type0) {|bytes_like bytes|} (b:bytes) = suf:bytes{is_suffix suf b}
-type extension_of (#bytes:Type0) {|bytes_like bytes|} (suf:bytes) = b:bytes{is_suffix suf b}
-
-type bare_parser (bytes:Type0) {|bytes_like bytes|} (a:Type) = b:bytes -> option (a & suffix_of b)
-//type bare_serializer (bytes:Type0) {|bytes_like bytes|} (a:Type) = x:a -> suffix:bytes -> extension_of suffix
+type bare_parser (bytes:Type0) {|bytes_like bytes|} (a:Type) = b:bytes -> option (a & bytes)
 type bare_serializer (bytes:Type0) {|bytes_like bytes|} (a:Type) = x:a -> list bytes
 
 /// What is the reason behind `parser_serializer_unit` and `parser_serializer`?
