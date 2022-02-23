@@ -4,7 +4,7 @@ open MLS.Bytes
 
 (*** Basic definitions ***)
 
-val add_prefixes: #bytes:Type0 -> {|bytes_like bytes|} -> list bytes -> bytes -> bytes
+val add_prefixes: #bytes:Type0 -> {|bytes_like bytes|} -> list (bytes) -> bytes -> bytes
 
 /// What is the reason behind `parser_serializer_unit` and `parser_serializer`?
 /// In some functions (such as `pse_list` which is used to build `ps_seq` or `ps_bytes`),
@@ -35,6 +35,22 @@ noeq type parser_serializer_unit (bytes:Type0) {|bytes_like bytes|} (a:Type) = {
     | Some (x, suffix) -> buf == add_prefixes (serialize x) suffix
     | None -> True
   );
+
+  is_valid: bytes_compatible_pre bytes -> a -> Type0;
+  //is_valid_trivial: pre:bytes_compatible_pre bytes -> Lemma
+  //  (requires forall b. pre b)
+  //  (ensures forall x. is_valid pre x);
+  //is_valid_monotonic: pre1:bytes_compatible_pre bytes -> pre2:bytes_compatible_pre bytes{forall b. pre1 b ==> pre2 b} -> x:a -> Lemma
+  //  (requires is_valid pre1 x)
+  //  (ensures is_valid pre2 x);
+  parse_pre: pre:bytes_compatible_pre bytes -> buf:bytes{pre buf} -> Lemma (
+    match parse buf with
+    | Some (x, suffix) -> is_valid pre x /\ pre suffix
+    | None -> True
+  );
+  serialize_pre: pre:bytes_compatible_pre bytes -> x:a{is_valid pre x} -> Lemma (
+    forall b. List.Tot.memP b (serialize x) ==> pre b
+  )
 }
 
 let is_not_unit (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer_unit bytes a) = ps_a.parse empty == None
@@ -50,7 +66,8 @@ val isomorphism_explicit:
   #a:Type -> #bytes:Type0 -> {| bytes_like bytes |} -> b:Type ->
   ps_a:parser_serializer_unit bytes a -> f:(a -> b) -> g:(b -> a) ->
   g_f_inv:(xa:a -> Lemma (g (f xa) == xa)) -> f_g_inv:(xb:b -> Lemma (f (g xb) == xb)) ->
-  Pure (parser_serializer_unit bytes b) (requires True) (ensures fun res -> is_not_unit res <==> is_not_unit ps_a)
+  Pure (parser_serializer_unit bytes b) (requires True)
+  (ensures fun res -> is_not_unit res <==> is_not_unit ps_a)
 
 val isomorphism:
   #a:Type -> #bytes:Type0 -> {| bytes_like bytes |} -> b:Type ->
@@ -61,12 +78,17 @@ val isomorphism:
 
 (*** Parser for basic types ***)
 
-val ps_unit: #bytes:Type0 -> {| bytes_like bytes |} -> parser_serializer_unit bytes unit
+val ps_unit: #bytes:Type0 -> {| bytes_like bytes |} -> Pure (parser_serializer_unit bytes unit) (requires True)
+  (ensures fun res -> forall pre x. res.is_valid pre x)
 
 type lbytes (bytes:Type0) {|bytes_like bytes|} (n:nat) = b:bytes{length b == n}
 val ps_lbytes: #bytes:Type0 -> {| bytes_like bytes |} -> n:nat -> Pure (parser_serializer_unit bytes (lbytes bytes n))
   (requires True)
-  (ensures fun res -> 1 <= n ==> is_not_unit res)
+  (ensures fun res -> (
+    1 <= n ==> is_not_unit res
+  ) /\ (
+    forall (pre:bytes_compatible_pre bytes) b. res.is_valid pre b <==> pre b
+  ))
 
 //val ps_u8: parser_serializer uint8
 //val ps_u16: parser_serializer uint16
@@ -87,6 +109,16 @@ noeq type parser_serializer_exact (bytes:Type0) {|bytes_like bytes|} (a:Type) = 
     | Some x -> serialize_exact x == buf
     | None -> True
   );
+
+  is_valid_exact: bytes_compatible_pre bytes -> a -> Type0;
+  parse_pre_exact: pre:bytes_compatible_pre bytes -> buf:bytes{pre buf} -> Lemma (
+    match parse_exact buf with
+    | Some x -> is_valid_exact pre x
+    | None -> True
+  );
+  serialize_pre_exact: pre:bytes_compatible_pre bytes -> x:a{is_valid_exact pre x} -> Lemma (
+    pre (serialize_exact x)
+  )
 }
 
 val ps_to_pse: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> parser_serializer_unit bytes a -> parser_serializer_exact bytes a

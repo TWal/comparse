@@ -51,6 +51,31 @@ class bytes_like (bytes:Type0) = {
   );
 }
 
+type bytes_compatible_pre (bytes:Type0) {|bytes_like bytes|} =
+  pre:(bytes -> Type0){
+    (pre empty) /\
+    (forall b1 b2. pre b1 /\ pre b2 ==> pre (concat b1 b2)) /\
+    (forall b i j. pre b /\ Some? (slice b i j) ==> pre (Some?.v (slice b i j))) /\
+    (forall sz n. pre (from_nat sz n))
+  }
+
+(*
+type bytes_coercion (bytes1:Type0) {|bl1:bytes_like bytes1|} (bytes2:Type0) {|bl2:bytes_like bytes2|} (pre:bytes_compatible_pre bytes1) =
+  f:(b:bytes1 -> Pure bytes2 (requires pre b) (ensures fun _ -> True)) {
+    (forall b. pre b ==> length (f b) == length b) /\
+    (f empty == empty) /\
+    (forall b1 b2. pre b1 /\ pre b2 ==> f (concat b1 b2) == concat (f b1) (f b2)) /\
+    (forall (b:bytes1) (i:nat) (j:nat{i <= j /\ j < length b}). pre b ==> (
+      match (slice (f b) i j, slice b i j) with
+      | Some fx, Some x -> fx == f x
+      | None, None -> True
+      | _ -> False
+    )) /\
+    (forall sz (b:bytes1{length b == sz}). pre b ==> (to_nat sz (f b)) == to_nat sz b) /\
+    (forall sz n. f (from_nat sz n) == from_nat sz n)
+  }
+*)
+
 (*
 open FStar.Seq
 
