@@ -7,13 +7,13 @@ open MLS.Bytes
 (*** Helper functions ***)
 
 #push-options "--ifuel 1 --fuel 1"
-val memP_append: #a:Type -> x:a -> l1:list a -> l2:list a -> Lemma
-  (List.Tot.memP x (l1@l2) <==> List.Tot.memP x l1 \/ List.Tot.memP x l2)
-  [SMTPat (List.Tot.memP x (l1@l2))]
-let rec memP_append #a x l1 l2 =
+val for_allP_append: #a:Type -> pre:(a -> Type0) -> l1:list a -> l2:list a -> Lemma
+  (for_allP pre (l1@l2) <==> for_allP pre l1 /\ for_allP pre l2)
+  [SMTPat (for_allP pre (l1@l2))]
+let rec for_allP_append #a pre l1 l2 =
   match l1 with
   | [] -> ()
-  | h::t -> memP_append x t l2
+  | h::t -> for_allP_append pre t l2
 #pop-options
 
 let rec add_prefixes #bytes #bl l suffix =
@@ -90,7 +90,7 @@ let rec add_prefixes_length_strict #bytes #bl l suffix =
 
 #push-options "--fuel 1 --ifuel 1"
 val add_prefixes_pre: #bytes:Type0 -> {|bytes_like bytes|} -> pre:bytes_compatible_pre bytes -> l:list bytes -> suffix:bytes -> Lemma
-  (requires (forall x. List.Tot.memP x l ==> pre x) /\ pre suffix)
+  (requires for_allP pre l /\ pre suffix)
   (ensures pre (add_prefixes l suffix))
 let rec add_prefixes_pre #bytes #bl pre l suffix =
   match l with
@@ -191,6 +191,8 @@ let bind #a #b #bytes ps_a ps_b =
     );
   })
 
+let bind_is_valid #a #b #bytes #bl ps_a ps_b pre xa xb = ()
+
 let isomorphism_explicit #a #bytes b ps_a f g g_f_inv f_g_inv =
   let parse_b buf =
     match ps_a.parse buf with
@@ -230,8 +232,12 @@ let isomorphism_explicit #a #bytes b ps_a f g g_f_inv f_g_inv =
   } in
   res
 
+let isomorphism_explicit_is_valid #a #bytes #bl b ps_a f g g_f_inv f_g_inv pre xb = ()
+
 let isomorphism #a b ps_a f g =
   isomorphism_explicit #a b ps_a f g (fun _ -> ()) (fun _ -> ())
+
+let isomorphism_is_valid #a #bytes #bl b ps_a f g pre xb = ()
 
 (*** Parser for basic types ***)
 
@@ -243,8 +249,10 @@ let ps_unit #bytes #bl =
     serialize_parse_inv = (fun buf -> assert_norm(add_prefixes [] buf == buf));
     is_valid = (fun _ _ -> True);
     parse_pre = (fun pre buf -> ());
-    serialize_pre = (fun pre xb -> assert_norm(forall (x:bytes). ~(List.Tot.memP x [])));
+    serialize_pre = (fun pre xb -> assert_norm(for_allP pre []));
   }
+
+let ps_unit_is_valid #bytes #bl pre x = ()
 
 //WHY THE #bytes #bl EVERYWHERE?????
 #push-options "--fuel 2"
@@ -284,6 +292,7 @@ let ps_lbytes #bytes #bl n =
   }
 #pop-options
 
+let ps_lbytes_is_valid #bytes #bl n pre x = ()
 
 val ps_uint: #bytes:Type0 -> {|bytes_like bytes|} -> sz:pos -> parser_serializer bytes (nat_lbytes sz)
 let ps_uint #bytes #bl sz =
@@ -314,7 +323,7 @@ let ps_uint #bytes #bl sz =
     );
     is_valid = (fun pre _ -> True);
     parse_pre = (fun pre buf -> ());
-    serialize_pre = (fun pre n -> assert_norm (forall x. List.Tot.memP x (serialize_uint n) <==> x == (from_nat sz n <: bytes)));
+    serialize_pre = (fun pre n -> assert_norm (for_allP pre (serialize_uint n) <==> pre (from_nat sz n <: bytes)));
   }
 
 (*
@@ -375,6 +384,8 @@ let ps_to_pse #bytes #bl #a ps_a =
     );
   }
 
+let ps_to_pse_is_valid #bytes #bl #a ps_a pre x = ()
+
 //The following functions are defined here because F* can't reason on recursive functions defined inside a function
 #push-options "--fuel 1"
 val _parse_la: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:parser_serializer bytes a -> buf:bytes -> Tot (option (list a)) (decreases (length (buf <: bytes)))
@@ -405,14 +416,9 @@ let rec _serialize_la #bytes #bl #a ps_a l =
     add_prefixes (ps_a.serialize h) (_serialize_la ps_a t)
 #pop-options
 
-#push-options "--fuel 1"
 val _is_valid_la: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:parser_serializer bytes a -> pre:bytes_compatible_pre bytes -> l:list a -> Type0
 let rec _is_valid_la #bytes #bl #a ps_a pre l =
-  match l with
-  | [] -> True
-  | h::t ->
-    ps_a.is_valid pre h /\ _is_valid_la ps_a pre t
-#pop-options
+  for_allP (ps_a.is_valid pre) l
 
 #push-options "--fuel 1"
 let pse_list #bytes #bl #a ps_a =
@@ -475,6 +481,12 @@ let pse_list #bytes #bl #a ps_a =
     parse_pre_exact = parse_pre_exact_la;
     serialize_pre_exact = serialize_pre_exact_la;
   }
+#pop-options
+
+#push-options "--fuel 1"
+let pse_list_is_valid #bytes #bl #a ps_a pre l =
+  // ????????
+  assert_norm ((pse_list ps_a).is_valid_exact pre l == _is_valid_la ps_a pre l)
 #pop-options
 
 
@@ -577,7 +589,7 @@ let parser_serializer_exact_to_parser_serializer #bytes #bl #a r pse_a =
       let x_serialized = pse_a.serialize_exact x in
       ps_nat.serialize_pre pre (length x_serialized);
       pse_a.serialize_pre_exact pre x;
-      assert_norm (forall x. List.Tot.memP x [x_serialized] ==> x == x_serialized)
+      assert_norm (for_allP pre [x_serialized] <==> pre x_serialized)
     );
   }
 
@@ -621,6 +633,8 @@ let ps_seq #bytes #bl #a r ps_a =
     (fun l -> Seq.seq_of_list l)
     (fun s -> Seq.seq_to_list s)
 
+let ps_seq_is_valid #bytes #bl #a r ps_a pre x = ()
+
 let ps_bytes #bytes #bl r =
   let parse_bytes (buf:bytes): option (blbytes bytes r) =
     if in_range r (length (buf <: bytes)) then
@@ -644,3 +658,4 @@ let ps_bytes #bytes #bl r =
   in
   parser_serializer_exact_to_parser_serializer r pse_bytes
 
+let ps_bytes_is_valid #bytes #bl r pre x = ()
