@@ -185,7 +185,7 @@ val pse_list_is_valid:
 
 type size_range = {
   min: nat;
-  max: max:nat{min <= max /\ max < pow2 64};
+  max: max:nat{normalize_term min <= normalize_term max /\ normalize_term max < normalize_term (pow2 64)};
 }
 
 let in_range (r:size_range) (x:nat) =

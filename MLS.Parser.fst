@@ -502,6 +502,7 @@ let ps_nat_in_range #bytes #bl r =
     else if r.max < pow2 32 then 4
     else 8
   in
+  assert_norm (r.max < pow2 64);
   let parse (buf:bytes): option (nat_in_range r & bytes) =
     match (ps_uint sz).parse buf with
     | None -> None
