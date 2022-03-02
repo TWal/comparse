@@ -25,6 +25,12 @@ let rec parser_name_from_type_name l =
   | [x] -> ["ps_" ^ x]
   | h::t -> h::(parser_name_from_type_name t)
 
+val mk_ie_app: term -> list term -> list term -> Tac term
+let mk_ie_app t implicits explicits =
+  let i t = (t, Q_Implicit) in
+  let e t = (t, Q_Explicit) in
+  mk_app (mk_app t (List.Tot.map i implicits)) (List.Tot.map e explicits)
+
 //TODO: parametrization
 val parser_from_type: term -> Tac parser_term
 let parser_from_type t =
@@ -33,14 +39,14 @@ let parser_from_type t =
     (pack (Tv_FVar (pack_fv (parser_name_from_type_name (inspect_fv fv)))), t)
   | _ -> fail "parser_from_type: only unparametrized parsers are supported"
 
-val mk_parser_unit: unit -> Tac parser_term
+val mk_parser_unit: unit -> parser_term
 let mk_parser_unit () =
-  (quote ps_unit, quote unit)
+  (`ps_unit, `unit)
 
 val mk_parser_pair: parser_term -> parser_term -> Tac parser_term
 let mk_parser_pair (ps_a, t_a) (ps_b, t_b) =
-  let ps_ab = mk_app (quote bind) [(t_a, Q_Implicit); (t_b, Q_Implicit); (ps_a, Q_Explicit); (ps_b, Q_Explicit)] in
-  let t_ab = mk_app (quote tuple2) [(t_a, Q_Explicit); (t_b, Q_Explicit)] in
+  let ps_ab = mk_ie_app (quote bind) [t_a; t_b] [ps_a; ps_b] in
+  let t_ab = mk_e_app (quote tuple2) [t_a; t_b] in
   (ps_ab, t_ab)
 
 val mk_parser_pairs: list term -> Tac parser_term
@@ -56,9 +62,7 @@ let rec mk_parser_pairs l =
 
 val mktuple2_fv: unit -> Tac fv
 let mktuple2_fv () =
-  match inspect (quote Mktuple2) with
-  | Tv_FVar fv -> fv
-  | _ -> fail "mktuple2_fv: not a fv???"
+  pack_fv (explode_qn (`%Mktuple2))
 
 val mk_destruct_pairs: list typ -> Tac (pattern & list bv)
 let rec mk_destruct_pairs l =
@@ -108,12 +112,11 @@ let mk_isomorphism_g input_type constructor_name constructor_types =
 val mk_isomorphism: typ -> name -> list typ -> parser_term -> Tac parser_term
 let mk_isomorphism result_type constructor_name constructor_types (parser_term, parser_type) =
   let result_parser_term =
-    mk_app (quote isomorphism) [
-      (parser_type, Q_Implicit);
-      (result_type, Q_Explicit);
-      (parser_term, Q_Explicit);
-      (mk_isomorphism_f parser_type constructor_name constructor_types, Q_Explicit);
-      (mk_isomorphism_g result_type constructor_name constructor_types, Q_Explicit)
+    mk_ie_app (quote isomorphism) [parser_type] [
+      result_type;
+      parser_term;
+      mk_isomorphism_f parser_type constructor_name constructor_types;
+      mk_isomorphism_g result_type constructor_name constructor_types
     ]
   in
   (result_parser_term, result_type)
@@ -134,7 +137,7 @@ let gen_parser_fun type_fv =
   in
 
   match inspect_sigelt type_declaration with
-  | Sg_Inductive name _ params _ (*typ*) constructors -> (
+  | Sg_Inductive name [] params _ (*typ*) constructors -> (
     //TODO: parametrization
     match constructors, params with
     | [(c_name, c_typ)], [] -> (
@@ -155,7 +158,7 @@ let gen_parser type_fv =
   in
   let parser_name = parser_name_from_type_name type_name in
   let (parser_fun, parsed_type) = gen_parser_fun type_fv in
-  let parser_type = mk_app (quote parser_serializer) [(parsed_type, Q_Explicit)] in
+  let parser_type = mk_e_app (quote parser_serializer) [parsed_type] in
   let parser_letbinding = pack_lb ({
     lb_fv = pack_fv parser_name;
     lb_us = [];
