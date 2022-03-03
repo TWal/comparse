@@ -31,13 +31,14 @@ let mk_ie_app t implicits explicits =
   let e t = (t, Q_Explicit) in
   mk_app (mk_app t (List.Tot.map i implicits)) (List.Tot.map e explicits)
 
-//TODO: parametrization
 val parser_from_type: term -> Tac parser_term
 let parser_from_type t =
-  match inspect t with
+  let type_unapplied, type_args = collect_app t in
+  match inspect type_unapplied with
   | Tv_FVar fv ->
-    (pack (Tv_FVar (pack_fv (parser_name_from_type_name (inspect_fv fv)))), t)
-  | _ -> fail "parser_from_type: only unparametrized parsers are supported"
+    let parser_type_unapplied = pack (Tv_FVar (pack_fv (parser_name_from_type_name (inspect_fv fv)))) in
+    (mk_app parser_type_unapplied type_args, t)
+  | _ -> fail "parser_from_type: head given by `collect_app` is not a fv?"
 
 val mk_parser_unit: unit -> parser_term
 let mk_parser_unit () =
@@ -121,7 +122,7 @@ let mk_isomorphism result_type constructor_name constructor_types (parser_term, 
   in
   (result_parser_term, result_type)
 
-val gen_parser_fun: term -> Tac parser_term
+val gen_parser_fun: term -> Tac (list binder & parser_term)
 let gen_parser_fun type_fv =
   let env = top_env () in
 
@@ -137,15 +138,16 @@ let gen_parser_fun type_fv =
   in
 
   match inspect_sigelt type_declaration with
-  | Sg_Inductive name [] params _ (*typ*) constructors -> (
-    //TODO: parametrization
-    match constructors, params with
-    | [(c_name, c_typ)], [] -> (
+  | Sg_Inductive name [] params typ constructors -> (
+    guard (term_eq typ (`Type0));
+    match constructors with
+    | [(c_name, c_typ)] -> (
       let types, _ = collect_arr c_typ in
       let pairs_parser = mk_parser_pairs types in
-      mk_isomorphism type_fv c_name types pairs_parser
+      let result_parsed_type = mk_e_app type_fv (Tactics.Util.map binder_to_term params) in
+      (params, mk_isomorphism result_parsed_type c_name types pairs_parser)
     )
-    | _ -> fail "gen_parser_fun: only unparametrized records are supported"
+    | _ -> fail "gen_parser_fun: only records are supported"
   )
   | _ -> fail "gen_parser_fun: only inductives are supported"
 
@@ -157,12 +159,17 @@ let gen_parser type_fv =
     | _ -> fail "type_fv is not a free variable"
   in
   let parser_name = parser_name_from_type_name type_name in
-  let (parser_fun, parsed_type) = gen_parser_fun type_fv in
-  let parser_type = mk_e_app (quote parser_serializer) [parsed_type] in
+  let (params, (parser_fun_body, parsed_type)) = gen_parser_fun type_fv in
+  let parser_fun = mk_abs params parser_fun_body in
+  let unparametrized_parser_type = mk_e_app (quote parser_serializer) [parsed_type] in
+  let parser_type =
+    match params with
+    | [] -> unparametrized_parser_type
+    | _::_ -> mk_arr params (pack_comp (C_Total unparametrized_parser_type []))
+  in
   let parser_letbinding = pack_lb ({
     lb_fv = pack_fv parser_name;
     lb_us = [];
-    //TODO: parametrization
     lb_typ = parser_type;
     lb_def = parser_fun;
   }) in
@@ -188,4 +195,29 @@ noeq type test_type3 =
 
 #push-options "--ifuel 8"
 %splice [ps_test_type2] (gen_parser (`test_type2))
+#pop-options
+
+assume val blbytes: nat -> Type0
+assume val ps_blbytes: n:nat -> parser_serializer (blbytes n)
+
+noeq type test_type4 = {
+  a:blbytes 256;
+  b:blbytes 256;
+  c:blbytes 256;
+  d:blbytes 256;
+}
+
+#push-options "--ifuel 8"
+%splice [ps_test_type4] (gen_parser (`test_type4))
+#pop-options
+
+noeq type test_type5 (n:nat) = {
+  a:blbytes n;
+  b:blbytes n;
+  c:blbytes n;
+  d:blbytes n;
+}
+
+#push-options "--ifuel 8"
+%splice [ps_test_type5] (gen_parser (`test_type5))
 #pop-options
