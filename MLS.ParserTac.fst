@@ -3,7 +3,7 @@ module MLS.ParserTac
 open FStar.Tactics
 
 assume new type parser_serializer (a:Type)
-assume val bind: #a:Type -> #b:Type -> parser_serializer a -> parser_serializer b -> parser_serializer (a & b)
+assume val bind: #a:Type -> #b:(a -> Type) -> parser_serializer a -> (x:a -> parser_serializer (b x)) -> parser_serializer (x:a & b x)
 
 assume new type char
 assume val ps_char: parser_serializer char
@@ -43,10 +43,14 @@ val mk_parser_unit: unit -> parser_term
 let mk_parser_unit () =
   (`ps_unit, `unit)
 
+val mk_const_function: typ -> term -> Tac term
+let mk_const_function ty t =
+  pack (Tv_Abs (mk_binder (fresh_bv ty)) t)
+
 val mk_parser_pair: parser_term -> parser_term -> Tac parser_term
 let mk_parser_pair (ps_a, t_a) (ps_b, t_b) =
-  let ps_ab = mk_ie_app (quote bind) [t_a; t_b] [ps_a; ps_b] in
-  let t_ab = mk_e_app (quote tuple2) [t_a; t_b] in
+  let ps_ab = mk_ie_app (quote bind) [t_a; mk_const_function t_a t_b] [ps_a; mk_const_function t_a ps_b] in
+  let t_ab = mk_e_app (quote dtuple2) [t_a; mk_const_function t_a t_b] in
   (ps_ab, t_ab)
 
 val mk_parser_pairs: list term -> Tac parser_term
@@ -60,9 +64,9 @@ let rec mk_parser_pairs l =
     mk_parser_pair pst_h pst_t
   )
 
-val mktuple2_fv: unit -> Tac fv
-let mktuple2_fv () =
-  pack_fv (explode_qn (`%Mktuple2))
+val mkdtuple2_fv: unit -> Tac fv
+let mkdtuple2_fv () =
+  pack_fv (explode_qn (`%Mkdtuple2))
 
 val mk_destruct_pairs: list typ -> Tac (pattern & list bv)
 let rec mk_destruct_pairs l =
@@ -75,7 +79,7 @@ let rec mk_destruct_pairs l =
   | h::t -> (
     let bv_h = fresh_bv h in
     let (pattern_t, bv_t) = mk_destruct_pairs t in
-    let pattern = Pat_Cons (mktuple2_fv ()) [(Pat_Var bv_h, false); (pattern_t, false)] in
+    let pattern = Pat_Cons (mkdtuple2_fv ()) [(Pat_Var bv_h, false); (pattern_t, false)] in
     let bvs = bv_h::bv_t in
     (pattern, bvs)
   )
@@ -99,7 +103,7 @@ let rec mk_construct_pairs l =
   | [] -> fail "mk_construct_pair: list too short (zero element)"
   | [h] -> pack (Tv_Var h)
   | h::t ->
-    mktuple_n [(pack (Tv_Var h)); mk_construct_pairs t]
+    mk_e_app (quote Mkdtuple2) [pack (Tv_Var h); mk_construct_pairs t]
 
 val mk_isomorphism_g: typ -> name -> list typ -> Tac term
 let mk_isomorphism_g input_type constructor_name constructor_types =
@@ -109,8 +113,8 @@ let mk_isomorphism_g input_type constructor_name constructor_types =
   let x_bv = fresh_bv input_type in
   pack (Tv_Abs (mk_binder x_bv) (pack (Tv_Match (pack (Tv_Var x_bv)) None [(match_pattern, match_body)])))
 
-val tuple2_ind: #a:Type0 -> #b:Type0 -> p:((a & b) -> Type0) -> squash (forall (x:a) (y:b). p (x, y)) -> Lemma (forall xy. p xy)
-let tuple2_ind #a #b p _ = ()
+val dtuple2_ind: #a:Type -> #b:(a -> Type) -> p:((x:a & b x) -> Type0) -> squash (forall (x:a) (y:b x). p (|x, y|)) -> Lemma (forall xy. p xy)
+let dtuple2_ind #a #b p _ = ()
 
 val arrow_to_forall: #a:Type -> p:(a -> Type0) -> squash (forall (x:a). p x) -> (x:a -> squash (p x))
 let arrow_to_forall #a p _ x =
@@ -120,7 +124,7 @@ val prove_record_isomorphism_from_pair: unit -> Tac unit
 let prove_record_isomorphism_from_pair () =
   apply (`arrow_to_forall);
   let _ = repeat (fun () ->
-    apply_lemma (`tuple2_ind);
+    apply_lemma (`dtuple2_ind);
     let _ = forall_intro () in
     ()
   ) in
