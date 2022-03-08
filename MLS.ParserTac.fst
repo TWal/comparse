@@ -9,12 +9,11 @@ assume new type char
 assume val ps_char: parser_serializer char
 assume val ps_unit: parser_serializer unit
 
-assume val isomorphism:
+assume val isomorphism_explicit:
   #a:Type -> b:Type ->
   ps_a:parser_serializer a -> f:(a -> b) -> g:(b -> a) ->
-  Pure (parser_serializer b)
-  (requires (forall xa. g (f xa) == xa) /\ (forall xb. f (g xb) == xb))
-  (ensures fun res -> True)
+  g_f_inv:(xa:a -> squash (g (f xa) == xa)) -> f_g_inv:(xb:b -> squash (f (g xb) == xb)) ->
+  parser_serializer b
 
 type parser_term = term & typ
 
@@ -110,14 +109,49 @@ let mk_isomorphism_g input_type constructor_name constructor_types =
   let x_bv = fresh_bv input_type in
   pack (Tv_Abs (mk_binder x_bv) (pack (Tv_Match (pack (Tv_Var x_bv)) None [(match_pattern, match_body)])))
 
+val tuple2_ind: #a:Type0 -> #b:Type0 -> p:((a & b) -> Type0) -> squash (forall (x:a) (y:b). p (x, y)) -> Lemma (forall xy. p xy)
+let tuple2_ind #a #b p _ = ()
+
+val arrow_to_forall: #a:Type -> p:(a -> Type0) -> squash (forall (x:a). p x) -> (x:a -> squash (p x))
+let arrow_to_forall #a p _ x =
+  ()
+
+val prove_record_isomorphism_from_pair: unit -> Tac unit
+let prove_record_isomorphism_from_pair () =
+  apply (`arrow_to_forall);
+  let _ = repeat (fun () ->
+    apply_lemma (`tuple2_ind);
+    let _ = forall_intro () in
+    ()
+  ) in
+  let _ = forall_intro () in
+  trefl()
+
+val last: #a:Type0 -> list a -> Tac a
+let last l =
+  guard (Cons? l);
+  List.Tot.last l
+
+val prove_record_isomorphism_from_record: unit -> Tac unit
+let prove_record_isomorphism_from_record () =
+  apply (`arrow_to_forall);
+  let b = forall_intro () in
+  destruct (binder_to_term b);
+  let binders = intros () in
+  let breq = last binders in
+  l_to_r [binder_to_term breq];
+  trefl ()
+
 val mk_isomorphism: typ -> name -> list typ -> parser_term -> Tac parser_term
 let mk_isomorphism result_type constructor_name constructor_types (parser_term, parser_type) =
   let result_parser_term =
-    mk_ie_app (quote isomorphism) [parser_type] [
+    mk_ie_app (quote isomorphism_explicit) [parser_type] [
       result_type;
       parser_term;
       mk_isomorphism_f parser_type constructor_name constructor_types;
-      mk_isomorphism_g result_type constructor_name constructor_types
+      mk_isomorphism_g result_type constructor_name constructor_types;
+      (`(synth_by_tactic (prove_record_isomorphism_from_pair)));
+      (`(synth_by_tactic (prove_record_isomorphism_from_record)));
     ]
   in
   (result_parser_term, result_type)
@@ -193,7 +227,7 @@ noeq type test_type3 =
   |Test_1: char -> char -> test_type3
   |Test_2: char -> test_type3
 
-#push-options "--ifuel 8"
+#push-options "--fuel 0 --ifuel 0"
 %splice [ps_test_type2] (gen_parser (`test_type2))
 #pop-options
 
@@ -207,7 +241,7 @@ noeq type test_type4 = {
   d:blbytes 256;
 }
 
-#push-options "--ifuel 8"
+#push-options "--fuel 0 --ifuel 0"
 %splice [ps_test_type4] (gen_parser (`test_type4))
 #pop-options
 
@@ -218,6 +252,6 @@ noeq type test_type5 (n:nat) = {
   d:blbytes n;
 }
 
-#push-options "--ifuel 8"
+#push-options "--fuel 0 --ifuel 0"
 %splice [ps_test_type5] (gen_parser (`test_type5))
 #pop-options
