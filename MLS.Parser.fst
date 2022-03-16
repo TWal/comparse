@@ -101,7 +101,7 @@ let rec add_prefixes_pre #bytes #bl pre l suffix =
 (*** Parser combinators ***)
 
 let bind #a #b #bytes ps_a ps_b =
-  let parse_ab (buf:bytes): option ((xa:a&(b xa)) & bytes) =
+  let parse_ab (buf:bytes): option (dtuple2 a b & bytes) =
     match ps_a.parse buf with
     | None -> None
     | Some (xa, buf_suffix) -> begin
@@ -112,7 +112,7 @@ let bind #a #b #bytes ps_a ps_b =
       )
     end
   in
-  let serialize_ab (x:(xa:a&(b xa))): list bytes =
+  let serialize_ab (x:dtuple2 a b): list bytes =
     let (|xa, xb|) = x in
     let la = ps_a.serialize xa in
     let lb = (ps_b xa).serialize xb in
@@ -138,7 +138,7 @@ let bind #a #b #bytes ps_a ps_b =
       )
     )
   end in
-  let is_valid_ab (pre:bytes_compatible_pre bytes) (x:(xa:a&(b xa))): Type0 =
+  let is_valid_ab (pre:bytes_compatible_pre bytes) (x:dtuple2 a b): Type0 =
     let (|xa, xb|) = x in
     ps_a.is_valid pre xa /\ (ps_b xa).is_valid pre xb
   in
@@ -193,51 +193,46 @@ let bind #a #b #bytes ps_a ps_b =
 
 let bind_is_valid #a #b #bytes #bl ps_a ps_b pre xa xb = ()
 
-let isomorphism_explicit #a #bytes b ps_a f g g_f_inv f_g_inv =
+let isomorphism #a #bytes b ps_a iso =
   let parse_b buf =
     match ps_a.parse buf with
-    | Some (xa, l) -> Some (f xa, l)
+    | Some (xa, l) -> Some (iso.a_to_b xa, l)
     | None -> None
   in
   let serialize_b xb =
-    ps_a.serialize (g xb)
+    ps_a.serialize (iso.b_to_a xb)
   in
   let is_valid_b pre xb =
-    ps_a.is_valid pre (g xb)
+    ps_a.is_valid pre (iso.b_to_a xb)
   in
   let res = {
     parse = parse_b;
     serialize = serialize_b;
     parse_serialize_inv = (fun (x:b) ->
-      f_g_inv x;
-      ps_a.parse_serialize_inv (g x)
+      iso.b_to_a_to_b x;
+      ps_a.parse_serialize_inv (iso.b_to_a x)
     );
     serialize_parse_inv = (fun (buf:bytes) ->
       match ps_a.parse buf with
       | Some (xa, l) -> (
-        g_f_inv xa;
+        iso.a_to_b_to_a xa;
         ps_a.serialize_parse_inv buf
       )
       | None -> ()
     );
     is_valid = is_valid_b;
     parse_pre = (fun pre buf ->
-      FStar.Classical.forall_intro g_f_inv;
+      introduce forall xa. iso.b_to_a (iso.a_to_b xa) == xa with iso.a_to_b_to_a xa;
       ps_a.parse_pre pre buf
     );
     serialize_pre = (fun pre xb ->
-      f_g_inv xb;
-      ps_a.serialize_pre pre (g xb)
+      iso.b_to_a_to_b xb;
+      ps_a.serialize_pre pre (iso.b_to_a xb)
     );
   } in
   res
 
-let isomorphism_explicit_is_valid #a #bytes #bl b ps_a f g g_f_inv f_g_inv pre xb = ()
-
-let isomorphism #a b ps_a f g =
-  isomorphism_explicit #a b ps_a f g (fun _ -> ()) (fun _ -> ())
-
-let isomorphism_is_valid #a #bytes #bl b ps_a f g pre xb = ()
+let isomorphism_is_valid #a #bytes #bl b ps_a iso pre xb = ()
 
 (*** Parser for basic types ***)
 
@@ -294,7 +289,6 @@ let ps_lbytes #bytes #bl n =
 
 let ps_lbytes_is_valid #bytes #bl n pre x = ()
 
-val ps_uint: #bytes:Type0 -> {|bytes_like bytes|} -> sz:pos -> parser_serializer bytes (nat_lbytes sz)
 let ps_uint #bytes #bl sz =
   let parse_uint (buf:bytes): option (nat_lbytes sz & bytes) =
     match (ps_lbytes sz).parse buf with
@@ -325,6 +319,8 @@ let ps_uint #bytes #bl sz =
     parse_pre = (fun pre buf -> ());
     serialize_pre = (fun pre n -> assert_norm (for_allP pre (serialize_uint n) <==> pre (from_nat sz n <: bytes)));
   }
+
+let ps_uint_is_valid #bytes #bl sz pre x = ()
 
 (*
 val ps_uint: t:IT.inttype{IT.unsigned t /\ ~(IT.U1? t)} -> parser_serializer (IT.uint_t t IT.SEC)
@@ -628,11 +624,15 @@ let ps_list #bytes #bl #a r ps_a =
 let ps_seq #bytes #bl #a r ps_a =
   FStar.Classical.forall_intro (Seq.lemma_list_seq_bij #a);
   FStar.Classical.forall_intro (Seq.lemma_seq_list_bij #a);
+  let iso = mk_isomorphism_between
+    #_ #(blseq a ps_a r)
+    (fun (l:bllist a ps_a r) -> Seq.seq_of_list l)
+    (fun (s:blseq a ps_a r) -> Seq.seq_to_list s)
+  in
   isomorphism
     (blseq a ps_a r)
     (ps_list r ps_a)
-    (fun l -> Seq.seq_of_list l)
-    (fun s -> Seq.seq_to_list s)
+    iso
 
 let ps_seq_is_valid #bytes #bl #a r ps_a pre x = ()
 

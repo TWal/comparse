@@ -63,10 +63,14 @@ let parser_serializer (bytes:Type0) {|bytes_like bytes|} (a:Type) = ps_a:parser_
 
 (*** Parser combinators ***)
 
-val bind: #a:Type -> #b:(a -> Type) -> #bytes:Type0 -> {| bytes_like bytes |} -> ps_a:parser_serializer_unit bytes a -> ps_b:(xa:a -> parser_serializer_unit bytes (b xa)) -> Pure (parser_serializer_unit bytes (xa:a&(b xa)))
+val bind: #a:Type -> #b:(a -> Type) -> #bytes:Type0 -> {| bytes_like bytes |} -> ps_a:parser_serializer_unit bytes a -> ps_b:(xa:a -> parser_serializer_unit bytes (b xa)) -> Pure (parser_serializer_unit bytes (dtuple2 a b))
   (requires True)
   (ensures fun res -> is_not_unit res <==> is_not_unit ps_a \/ (forall xa. is_not_unit (ps_b xa)))
 
+// This is a recursive SMTPat!
+// You might want to use #set-options "--z3cliopt 'smt.qi.eager_threshold=100'" (or higher value)
+// See this SO question for more information about this parameter:
+// https://stackoverflow.com/questions/13198158/proving-inductive-facts-in-z3
 val bind_is_valid:
   #a:Type -> #b:(a -> Type) -> #bytes:Type0 -> {| bytes_like bytes |} ->
   ps_a:parser_serializer_unit bytes a -> ps_b:(xa:a -> parser_serializer_unit bytes (b xa)) ->
@@ -74,35 +78,38 @@ val bind_is_valid:
   Lemma ((bind ps_a ps_b).is_valid pre (|xa, xb|) <==> ps_a.is_valid pre xa /\ (ps_b xa).is_valid pre xb)
   [SMTPat ((bind ps_a ps_b).is_valid pre (|xa, xb|))]
 
-val isomorphism_explicit:
-  #a:Type -> #bytes:Type0 -> {| bytes_like bytes |} -> b:Type ->
-  ps_a:parser_serializer_unit bytes a -> f:(a -> b) -> g:(b -> a) ->
-  g_f_inv:(xa:a -> Lemma (g (f xa) == xa)) -> f_g_inv:(xb:b -> Lemma (f (g xb) == xb)) ->
-  Pure (parser_serializer_unit bytes b) (requires True)
-  (ensures fun res -> is_not_unit res <==> is_not_unit ps_a)
+noeq type isomorphism_between (a:Type) (b:Type) = {
+  a_to_b: a -> b;
+  b_to_a: b -> a;
+  a_to_b_to_a: x:a -> squash (b_to_a (a_to_b x) == x);
+  b_to_a_to_b: x:b -> squash (a_to_b (b_to_a x) == x);
+}
 
-val isomorphism_explicit_is_valid:
-  #a:Type -> #bytes:Type0 -> {| bytes_like bytes |} -> b:Type ->
-  ps_a:parser_serializer_unit bytes a -> f:(a -> b) -> g:(b -> a) ->
-  g_f_inv:(xa:a -> Lemma (g (f xa) == xa)) -> f_g_inv:(xb:b -> Lemma (f (g xb) == xb)) ->
-  pre:bytes_compatible_pre bytes -> xb:b ->
-  Lemma ((isomorphism_explicit b ps_a f g g_f_inv f_g_inv).is_valid pre xb <==> ps_a.is_valid pre (g xb))
-  [SMTPat ((isomorphism_explicit b ps_a f g g_f_inv f_g_inv).is_valid pre xb)]
+let mk_isomorphism_between (#a:Type) (#b:Type) (a_to_b:a -> b) (b_to_a:b -> a):
+  Pure (isomorphism_between a b)
+       (requires (forall x. a_to_b (b_to_a x) == x) /\ (forall x. b_to_a (a_to_b x) == x))
+       (ensures fun _ -> True)
+  = {
+    a_to_b;
+    b_to_a;
+    a_to_b_to_a = (fun _ -> ());
+    b_to_a_to_b = (fun _ -> ());
+  }
 
 val isomorphism:
   #a:Type -> #bytes:Type0 -> {| bytes_like bytes |} -> b:Type ->
-  ps_a:parser_serializer_unit bytes a -> f:(a -> b) -> g:(b -> a) ->
+  ps_a:parser_serializer_unit bytes a -> iso:isomorphism_between a b ->
   Pure (parser_serializer_unit bytes b)
-  (requires (forall xa. g (f xa) == xa) /\ (forall xb. f (g xb) == xb))
+  (requires True)
   (ensures fun res -> is_not_unit res <==> is_not_unit ps_a)
 
 val isomorphism_is_valid:
   #a:Type -> #bytes:Type0 -> {| bytes_like bytes |} -> b:Type ->
-  ps_a:parser_serializer_unit bytes a -> f:(a -> b) -> g:(b -> a) ->
+  ps_a:parser_serializer_unit bytes a -> iso:isomorphism_between a b ->
   pre:bytes_compatible_pre bytes -> xb:b ->
-  Lemma (requires (forall xa. g (f xa) == xa) /\ (forall xb. f (g xb) == xb))
-  (ensures (isomorphism b ps_a f g).is_valid pre xb <==> ps_a.is_valid pre (g xb))
-  [SMTPat ((isomorphism b ps_a f g).is_valid pre xb)]
+  Lemma
+  ((isomorphism b ps_a iso).is_valid pre xb <==> ps_a.is_valid pre (iso.b_to_a xb))
+  [SMTPat ((isomorphism b ps_a iso).is_valid pre xb)]
 
 (*** Parser for basic types ***)
 
@@ -131,12 +138,18 @@ val ps_lbytes_is_valid:
   Lemma ((ps_lbytes n).is_valid pre x <==> pre (x <: bytes))
   [SMTPat ((ps_lbytes n).is_valid pre x)]
 
-
+val ps_uint: #bytes:Type0 -> {|bytes_like bytes|} -> sz:pos -> parser_serializer bytes (nat_lbytes sz)
 //val ps_u8: parser_serializer uint8
 //val ps_u16: parser_serializer uint16
 //val ps_u32: parser_serializer uint32
 //val ps_u64: parser_serializer uint64
 //val ps_u128: parser_serializer uint128
+
+val ps_uint_is_valid:
+  #bytes:Type0 -> {| bytes_like bytes |} -> sz:pos ->
+  pre:bytes_compatible_pre bytes -> x:nat_lbytes sz ->
+  Lemma ((ps_uint sz).is_valid pre x)
+  [SMTPat ((ps_uint sz).is_valid pre x)]
 
 (*** Exact parsers ***)
 
