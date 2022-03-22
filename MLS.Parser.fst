@@ -1,5 +1,6 @@
 module MLS.Parser
 
+open FStar.List.Tot
 open MLS.Bytes
 
 #set-options "--fuel 0 --ifuel 2"
@@ -304,7 +305,7 @@ let ps_to_pse #bytes #bl #a ps_a =
       else
         None
   in
-  let serialize_exact_a (x:a): b:bytes =
+  let serialize_exact_a (x:a): bytes =
     ps_a.parse_serialize_inv x empty;
     add_prefixes (ps_a.serialize x) empty
   in
@@ -366,7 +367,7 @@ let rec _serialize_la #bytes #bl #a ps_a l =
 #pop-options
 
 val _is_valid_la: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:parser_serializer bytes a -> pre:bytes_compatible_pre bytes -> l:list a -> Type0
-let rec _is_valid_la #bytes #bl #a ps_a pre l =
+let _is_valid_la #bytes #bl #a ps_a pre l =
   for_allP (ps_a.is_valid pre) l
 
 #push-options "--fuel 1"
