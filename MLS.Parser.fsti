@@ -58,7 +58,7 @@ noeq type parser_serializer_unit (bytes:Type0) {|bytes_like bytes|} (a:Type) = {
   )
 }
 
-let is_not_unit (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer_unit bytes a) = forall b. length b == 0 ==> ps_a.parse b == None
+val is_not_unit: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:parser_serializer_unit bytes a -> Type0
 let parser_serializer (bytes:Type0) {|bytes_like bytes|} (a:Type) = ps_a:parser_serializer_unit bytes a{is_not_unit ps_a}
 
 (*** Parser combinators ***)
@@ -102,9 +102,15 @@ let mk_isomorphism_between (#a:Type) (#b:Type) (a_to_b:a -> b) (b_to_a:b -> a):
 val isomorphism:
   #a:Type -> #bytes:Type0 -> {| bytes_like bytes |} -> b:Type ->
   ps_a:parser_serializer_unit bytes a -> iso:isomorphism_between a b ->
-  Pure (parser_serializer_unit bytes b)
-  (requires True)
-  (ensures fun res -> is_not_unit res <==> is_not_unit ps_a)
+  parser_serializer_unit bytes b
+
+val isomorphism_is_not_unit:
+  #a:Type -> #bytes:Type0 -> {| bytes_like bytes |} -> b:Type ->
+  ps_a:parser_serializer_unit bytes a -> iso:isomorphism_between a b ->
+  Lemma
+    (requires is_not_unit ps_a)
+    (ensures is_not_unit (isomorphism b ps_a iso))
+    [SMTPat (is_not_unit (isomorphism b ps_a iso))]
 
 val isomorphism_is_valid:
   #a:Type -> #bytes:Type0 -> {| bytes_like bytes |} -> b:Type ->
@@ -116,8 +122,7 @@ val isomorphism_is_valid:
 
 (*** Parser for basic types ***)
 
-val ps_unit: #bytes:Type0 -> {| bytes_like bytes |} -> Pure (parser_serializer_unit bytes unit) (requires True)
-  (ensures fun res -> forall pre x. res.is_valid pre x)
+val ps_unit: #bytes:Type0 -> {| bytes_like bytes |} -> parser_serializer_unit bytes unit
 
 val ps_unit_is_valid:
   #bytes:Type0 -> {| bl:bytes_like bytes |} ->
@@ -127,13 +132,14 @@ val ps_unit_is_valid:
 
 
 type lbytes (bytes:Type0) {|bytes_like bytes|} (n:nat) = b:bytes{length b == n}
-val ps_lbytes: #bytes:Type0 -> {| bytes_like bytes |} -> n:nat -> Pure (parser_serializer_unit bytes (lbytes bytes n))
-  (requires True)
-  (ensures fun res -> (
-    1 <= n ==> is_not_unit res
-  ) /\ (
-    forall (pre:bytes_compatible_pre bytes) b. res.is_valid pre b <==> pre b
-  ))
+val ps_lbytes: #bytes:Type0 -> {| bytes_like bytes |} -> n:nat -> parser_serializer_unit bytes (lbytes bytes n)
+
+val ps_lbytes_is_not_unit:
+  #bytes:Type0 -> {| bl:bytes_like bytes |} -> n:nat ->
+  Lemma
+    (requires 1 <= n)
+    (ensures is_not_unit (ps_lbytes #bytes #bl n))
+    [SMTPat (is_not_unit (ps_lbytes #bytes #bl n))]
 
 val ps_lbytes_is_valid:
   #bytes:Type0 -> {| bytes_like bytes |} -> n:nat ->

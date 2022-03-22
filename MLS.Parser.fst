@@ -5,6 +5,13 @@ open MLS.Bytes
 
 #set-options "--fuel 0 --ifuel 2"
 
+let rec add_prefixes #bytes #bl l suffix =
+  match l with
+  | [] -> suffix
+  | h::t -> concat h ((add_prefixes t suffix))
+
+let is_not_unit #bytes #bl #a ps_a = forall b. length b == 0 ==> ps_a.parse b == None
+
 (*** Helper functions ***)
 
 #push-options "--ifuel 1 --fuel 1"
@@ -16,11 +23,6 @@ let rec for_allP_append #a pre l1 l2 =
   | [] -> ()
   | h::t -> for_allP_append pre t l2
 #pop-options
-
-let rec add_prefixes #bytes #bl l suffix =
-  match l with
-  | [] -> suffix
-  | h::t -> concat h ((add_prefixes t suffix))
 
 #push-options "--ifuel 1 --fuel 1"
 val add_prefixes_add_prefixes: #bytes:Type0 -> {|bytes_like bytes|} -> l1:list bytes -> l2:list bytes -> suffix:bytes -> Lemma
@@ -185,6 +187,8 @@ let isomorphism #a #bytes b ps_a iso =
   } in
   res
 
+let isomorphism_is_not_unit #a #bytes #bl b ps_a iso = ()
+
 let isomorphism_is_valid #a #bytes #bl b ps_a iso pre xb = ()
 
 (*** Parser for basic types ***)
@@ -239,6 +243,8 @@ let ps_lbytes #bytes #bl n =
     serialize_pre = (fun pre b -> ());
   }
 #pop-options
+
+let ps_lbytes_is_not_unit #bytes #bl n = ()
 
 let ps_lbytes_is_valid #bytes #bl n pre x = ()
 
