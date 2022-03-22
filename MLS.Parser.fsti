@@ -58,14 +58,17 @@ noeq type parser_serializer_unit (bytes:Type0) {|bytes_like bytes|} (a:Type) = {
   )
 }
 
-let is_not_unit (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer_unit bytes a) = ps_a.parse empty == None
+let is_not_unit (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer_unit bytes a) = forall b. length b == 0 ==> ps_a.parse b == None
 let parser_serializer (bytes:Type0) {|bytes_like bytes|} (a:Type) = ps_a:parser_serializer_unit bytes a{is_not_unit ps_a}
 
 (*** Parser combinators ***)
 
-val bind: #a:Type -> #b:(a -> Type) -> #bytes:Type0 -> {| bytes_like bytes |} -> ps_a:parser_serializer_unit bytes a -> ps_b:(xa:a -> parser_serializer_unit bytes (b xa)) -> Pure (parser_serializer_unit bytes (dtuple2 a b))
-  (requires True)
-  (ensures fun res -> is_not_unit res <==> is_not_unit ps_a \/ (forall xa. is_not_unit (ps_b xa)))
+val bind: #a:Type -> #b:(a -> Type) -> #bytes:Type0 -> {| bytes_like bytes |} -> ps_a:parser_serializer_unit bytes a -> ps_b:(xa:a -> parser_serializer_unit bytes (b xa)) -> parser_serializer_unit bytes (dtuple2 a b)
+
+val bind_is_not_unit: #a:Type -> #b:(a -> Type) -> #bytes:Type0 -> {| bytes_like bytes |} -> ps_a:parser_serializer_unit bytes a -> ps_b:(xa:a -> parser_serializer_unit bytes (b xa)) -> Lemma
+  (requires is_not_unit ps_a \/ (forall xa. is_not_unit (ps_b xa)))
+  (ensures is_not_unit (bind ps_a ps_b))
+  [SMTPat (is_not_unit (bind ps_a ps_b))]
 
 // This is a recursive SMTPat!
 // You might want to use #set-options "--z3cliopt 'smt.qi.eager_threshold=100'" (or higher value)

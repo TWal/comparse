@@ -30,9 +30,17 @@ let rec add_prefixes_add_prefixes l1 l2 suffix =
   | h::t -> add_prefixes_add_prefixes t l2 suffix
 #pop-options
 
+#push-options "--ifuel 1 --fuel 1"
+val prefixes_length: #bytes:Type0 -> {|bytes_like bytes|} -> list bytes -> nat
+let rec prefixes_length #bytes #bl l =
+  match l with
+  | [] -> 0
+  | h::t -> length h + (prefixes_length t)
+#pop-options
+
 #push-options "--fuel 1 --ifuel 1"
 val add_prefixes_length: #bytes:Type0 -> {|bytes_like bytes|} -> l:list bytes -> suffix:bytes -> Lemma
-  (length suffix <= length (add_prefixes l suffix))
+  (length (add_prefixes l suffix) == prefixes_length l + length suffix)
 let rec add_prefixes_length #bytes #bl l suffix =
   match l with
   | [] -> ()
@@ -43,50 +51,6 @@ let rec add_prefixes_length #bytes #bl l suffix =
 
 val prefixes_is_empty: #bytes:Type0 -> {|bytes_like bytes|} -> list bytes -> bool
 let prefixes_is_empty l = List.Tot.for_all (fun b -> length b = 0) l
-
-#push-options "--fuel 1 --ifuel 1"
-val add_prefixes_identity: #bytes:Type0 -> {|bytes_like bytes|} -> l:list bytes -> suffix:bytes -> Lemma
-  (requires add_prefixes l suffix == suffix)
-  (ensures prefixes_is_empty l)
-let rec add_prefixes_identity #bytes #bl l suffix =
-  match l with
-  | [] -> ()
-  | h::t ->
-    concat_length h (add_prefixes t suffix);
-    add_prefixes_length t suffix;
-    length_zero h;
-    concat_empty_left (add_prefixes t suffix);
-    add_prefixes_identity #bytes #bl t suffix
-#pop-options
-
-#push-options "--fuel 1 --ifuel 1"
-val add_prefixes_identity_inv: #bytes:Type0 -> {|bytes_like bytes|} -> l:list bytes -> suffix:bytes -> Lemma
-  (requires prefixes_is_empty l)
-  (ensures add_prefixes l suffix == suffix)
-let rec add_prefixes_identity_inv #bytes #bl l suffix =
-  match l with
-  | [] -> ()
-  | h::t ->
-    length_zero h;
-    concat_empty_left (add_prefixes t suffix);
-    add_prefixes_identity_inv #bytes #bl t suffix
-#pop-options
-
-#push-options "--fuel 1 --ifuel 1"
-val add_prefixes_length_strict: #bytes:Type0 -> {|bytes_like bytes|} -> l:list bytes -> suffix:bytes -> Lemma
-  (requires ~(prefixes_is_empty l))
-  (ensures length suffix < length (add_prefixes l suffix))
-let rec add_prefixes_length_strict #bytes #bl l suffix =
-  match l with
-  | [] -> ()
-  | h::t ->
-    concat_length h (add_prefixes t suffix);
-    if length h = 0 then (
-      add_prefixes_length_strict t suffix
-    ) else (
-      add_prefixes_length t suffix
-    )
-#pop-options
 
 #push-options "--fuel 1 --ifuel 1"
 val add_prefixes_pre: #bytes:Type0 -> {|bytes_like bytes|} -> pre:bytes_compatible_pre bytes -> l:list bytes -> suffix:bytes -> Lemma
@@ -118,32 +82,11 @@ let bind #a #b #bytes ps_a ps_b =
     let lb = (ps_b xa).serialize xb in
     la@lb
   in
-  let lemma_not_unit (): Lemma((parse_ab (empty <: bytes) == None) <==> (ps_a.parse (empty <: bytes) == None) \/ (forall xa. (ps_b xa).parse (empty <: bytes) == None)) = begin
-    match ps_a.parse (empty <: bytes) with
-    | None -> ()
-    | Some (xa, empty_suffix) -> (
-      ps_a.serialize_parse_inv (empty <: bytes);
-      add_prefixes_length (ps_a.serialize xa) empty_suffix;
-      empty_length #bytes ();
-      length_zero empty_suffix;
-      introduce forall x. x == xa with (
-        ps_a.parse_serialize_inv xa (add_prefixes (ps_a.serialize x) empty);
-        let l_xa = ps_a.serialize xa in
-        let l_x = ps_a.serialize x in
-        add_prefixes_add_prefixes l_xa l_x empty;
-        add_prefixes_identity (l_xa) empty;
-        add_prefixes_add_prefixes l_xa l_x empty;
-        add_prefixes_identity_inv (l_xa) (add_prefixes l_x empty);
-        ps_a.parse_serialize_inv x empty
-      )
-    )
-  end in
   let is_valid_ab (pre:bytes_compatible_pre bytes) (x:dtuple2 a b): Type0 =
     let (|xa, xb|) = x in
     ps_a.is_valid pre xa /\ (ps_b xa).is_valid pre xb
   in
 
-  lemma_not_unit ();
   ({
     parse = parse_ab;
     serialize = serialize_ab;
@@ -190,6 +133,15 @@ let bind #a #b #bytes ps_a ps_b =
       (ps_b xa).serialize_pre pre xb
     );
   })
+
+let bind_is_not_unit #a #b #bytes ps_a ps_b =
+  introduce forall b. length b == 0 ==> (bind ps_a ps_b).parse b == None with (
+    match ps_a.parse b with
+    | None -> ()
+    | Some (xa, b_suffix) ->
+      ps_a.serialize_parse_inv b;
+      add_prefixes_length (ps_a.serialize xa) b_suffix
+  )
 
 let bind_is_valid #a #b #bytes #bl ps_a ps_b pre xa xb = ()
 
@@ -347,7 +299,7 @@ let ps_to_pse #bytes #bl #a ps_a =
     match ps_a.parse buf with
     | None -> None
     | Some (x, suffix) ->
-      if length suffix = 0 then
+      if recognize_empty suffix then
         Some x
       else
         None
@@ -368,8 +320,7 @@ let ps_to_pse #bytes #bl #a ps_a =
       | None -> ()
       | Some _ -> (
         let (x, suffix) = Some?.v (ps_a.parse buf) in
-        ps_a.serialize_parse_inv buf;
-        length_zero suffix
+        ps_a.serialize_parse_inv buf
       )
     );
     is_valid_exact = ps_a.is_valid;
@@ -386,8 +337,10 @@ let ps_to_pse_is_valid #bytes #bl #a ps_a pre x = ()
 #push-options "--fuel 1"
 val _parse_la: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:parser_serializer bytes a -> buf:bytes -> Tot (option (list a)) (decreases (length (buf <: bytes)))
 let rec _parse_la #bytes #bl #a ps_a buf =
-  if length (buf <: bytes) = 0 then (
+  if recognize_empty buf then (
     Some []
+  ) else if length (buf <: bytes) = 0 then (
+    None
   ) else (
     match ps_a.parse (buf <: bytes) with
     | None -> None
@@ -427,18 +380,23 @@ let pse_list #bytes #bl #a ps_a =
     | h::t ->
       ps_a.parse_serialize_inv h (serialize_la t);
       let suffix = (_serialize_la ps_a t) in
-      if prefixes_is_empty (ps_a.serialize h) then (
-        add_prefixes_identity_inv (ps_a.serialize h) empty;
+      if prefixes_length (ps_a.serialize h) = 0 then (
+        empty_length #bytes ();
         ps_a.parse_serialize_inv h empty;
+        add_prefixes_length (ps_a.serialize h) empty;
         assert(False)
       ) else (
-        add_prefixes_length_strict (ps_a.serialize h) suffix;
+        empty_length #bytes ();
+        add_prefixes_length (ps_a.serialize h) suffix;
         parse_serialize_inv_la t
       )
   in
+
   let rec serialize_parse_inv_la (buf:bytes): Lemma (ensures (match parse_la buf with | None -> True | Some l -> serialize_la l == buf)) (decreases (length (buf <: bytes))) =
-    if length (buf <: bytes) = 0 then (
-      length_zero (buf <: bytes)
+    if recognize_empty buf then (
+      ()
+    ) else if length (buf <: bytes) = 0 then (
+      ()
     ) else (
        match parse_la buf with
        | None -> ()
@@ -449,7 +407,9 @@ let pse_list #bytes #bl #a ps_a =
     )
   in
   let rec parse_pre_exact_la (pre:bytes_compatible_pre bytes) (buf:bytes{pre buf}): Lemma (ensures (match parse_la buf with | Some x -> is_valid_la pre x | None -> True)) (decreases (length (buf <: bytes))) =
-    if length (buf <: bytes) = 0 then (
+    if recognize_empty (buf <: bytes) then (
+      ()
+    ) else if length (buf <: bytes) = 0 then (
       ()
     ) else (
       match parse_la buf with

@@ -9,14 +9,10 @@ class bytes_like (bytes:Type0) = {
 
   empty: bytes;
   empty_length: unit -> Lemma (length empty == 0);
-  length_zero: b:bytes -> Lemma
-    (requires length b == 0)
-    (ensures b == empty);
+  recognize_empty: b:bytes -> res:bool{res <==> b == empty};
 
   concat: bytes -> bytes -> bytes;
   concat_length: b1:bytes -> b2:bytes -> Lemma (length (concat b1 b2) == (length b1) + (length b2));
-
-  concat_empty_left: b:bytes -> Lemma (concat empty b == b);
 
   slice: b:bytes -> i:nat -> j:nat{i <= j /\ j <= length b} -> option bytes;
   slice_length: b:bytes -> i:nat -> j:nat{i <= j /\ j <= length b} -> Lemma (
