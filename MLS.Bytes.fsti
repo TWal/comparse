@@ -4,6 +4,16 @@ open FStar.Mul
 
 type nat_lbytes (sz:nat) = n:nat{n < pow2 (8*sz)}
 
+/// Minimal interface to manipulate symbolic bytes.
+/// Here are the explanations for a few design decisions:
+/// - `slice` returns an option, hence can fail if the indexes are not on the correct bounds.
+///   * We require `slice` to succeed on the bounds of a `concat` (see `slice_concat_...`).
+///   * This is useful to state the `concat_slice` lemma in a way which would be correct on symbolic bytes.
+/// - We don't require that only `empty` has length zero, e.g. we may have `concat empty empty <> empty`.
+/// - To compensate the last fact, and the fact that we don't require decidable equality,
+///   we need a function that recognize the `empty` bytes.
+/// - The `to_nat` function can fail, if the bytes are not public for example
+
 class bytes_like (bytes:Type0) = {
   length: bytes -> nat;
 
@@ -46,6 +56,9 @@ class bytes_like (bytes:Type0) = {
     | None -> True
   );
 }
+
+/// This type defines a predicate on `bytes` that is compatible with its structure.
+/// It is meant to be used for labeling predicates, which are typically compatible with the `bytes` structure.
 
 type bytes_compatible_pre (bytes:Type0) {|bytes_like bytes|} =
   pre:(bytes -> Type0){

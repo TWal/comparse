@@ -9,25 +9,75 @@ let rec for_allP (#a:Type) (pre:a -> Type0) (l:list a): Type0 =
     | [] -> True
     | h::t -> pre h /\ for_allP pre t
 
+///   add_prefixes [prefix0; prefix1; ...; prefixn] suffix
+/// = concat prefix0 (concat prefix1 (... (concat prefixn suffix)))`
 val add_prefixes: #bytes:Type0 -> {|bytes_like bytes|} -> list (bytes) -> bytes -> bytes
 
-/// What is the reason behind `parser_serializer_unit` and `parser_serializer`?
-/// In some functions (such as `pse_list` which is used to build `ps_seq` or `ps_bytes`),
-/// it is useful to know that `parse` will never consume 0 bytes, and `serialize` will never return `bytes_empty`.
-/// Such types only have one element, hence are isomorphic to `unit`. They are (anti-)recognized by the `is_not_unit` predicate.
-/// Thus they depend on a `parser_serializer` which doesn't serialize/parse a unit type.
-/// It is however very useful to be able to parse a unit type, in the example of an optional:
-///   struct {
-///       uint8 present;
-///       select (present) {
-///           case 0: struct{}; //<-- parsed with ps_unit!
-///           case 1: T value;
-///       }
-///   } optional<T>;
-/// In this interface, we tried to use `parser_serializer` for return types when possible,
-/// and to use `parser_serializer_unit` for argument types when possible.
-/// They are named `parser_serializer_unit` / `parser_serializer` and not `parser_serializer` / `parser_serializer_nonempty`
-/// because `parser_serializer_nonempty` is ugly, and it's the type that is the most used by the user.
+/// The following structure defines composable parsers / serializer.
+/// For a structure that is meant to actually be used by the user, see `parser_serializer_exact`.
+///
+/// The parser takes as input a `bytes`, and returns an `option` (it can fail on malformed inputs) of an `a` (the parsed value) and a `bytes` (the suffix of the input that was not parsed).
+/// The serializer takes as input an `a`, and returns a list of `bytes`, that you need to concatenate with `add_prefixes`.
+///
+/// -- Begin parenthesis about symbolic bytes --
+///
+/// Why do we have to concatenate the bytes ourselve, can't the serializer do it itself?
+/// See the following example, using a C-like syntax:
+/// struct A {
+///   int a0;
+///   int a1;
+/// };
+/// struct B {
+///   int b0;
+///   int b1;
+/// };
+/// struct C {
+///   A a;
+///   B b;
+/// };
+/// If the serializer did the concatenations, where it what would happen:
+///   serialize_C c
+/// = serialize_A c.a + serialize_B c.b
+/// = (serialize_int c.a.a0 + serialize_int c.a.a1) + (serialize_int c.b.b0 + serialize_int c.b.b1)
+/// = (int_to_bytes  c.a.a0 + int_to_bytes  c.a.a1) + (int_to_bytes  c.b.b0 + int_to_bytes  c.b.b1)
+///
+/// When the serializer instead returns a list, you get:
+///   serialize_C c
+/// = serialize_A c.a @ serialize_B c.b
+/// = (serialize_int c.a.a0  @ serialize_int c.a.a1 ) @ (serialize_int c.b.b0  @ serialize_int c.b.b1 )
+/// = ([int_to_bytes c.a.a0] @ [int_to_bytes c.a.a1]) @ ([int_to_bytes c.b.b0] @ [int_to_bytes c.b.b1])
+/// = [ int_to_bytes c.a.a0;    int_to_bytes c.a.a1;      int_to_bytes c.b.b0;    int_to_bytes c.b.b1]
+/// Hence `add_prefixes (serialize_C c) empty` is equal to:
+/// = int_to_bytes c.a.a0 + (int_to_bytes c.a.a1 + (int_to_bytes c.b.b0 + (int_to_bytes c.b.b1 + empty)))
+///
+/// Note how the parenthesing changes!
+/// On concrete bytes, this is equivalent. However, on symbolic bytes, we don't have associativity of concatenation.
+/// In the symbolic world, if you want to slice `a + b`, then the slice would only work in one of the following cases:
+/// - slice from `0` to `length a` to get `a`
+/// - slice from `length a` to `length (a+b)` to get `b`
+/// It means that in (a + b) + c`, you can't get `a` in one slice, you have to do it in two steps:
+/// - slice to obtain `a+b`
+/// - slice to obtain `a`
+///
+/// The last parenthesing is better for parsing, because parsing is done in the following order:
+/// - parse a0
+/// - parse a1
+/// - construct a = A{a0; a1}
+/// - parse b0
+/// - parse b1
+/// - construct b = B{b0; b1}
+/// - construct c = C{a; b}
+/// In the first parenthesing, the parser would need to guess the size of the structure A.
+/// In this example, this would be possible, however in the general case A could e.g. contain a variable-length list.
+/// In the last parenthesing, the parser would work fine with symbolic bytes.
+///
+/// -- End parenthesis about symbolic bytes --
+///
+/// The parser and serializer are inverse of each other, as stated by the `..._inv` lemmas.
+/// The structure also gives you a predicate transformer called `is_valid`:
+/// given a predicate on `bytes` compatible with `concat` and `slice`, you get a predicate on `a`,
+/// which says whether the bytes predicate is valid on all the bytes contained inside `a`.
+/// You also get two lemmas giving how the predicate is transformed when parsing and serializing.
 
 noeq type parser_serializer_unit (bytes:Type0) {|bytes_like bytes|} (a:Type) = {
   parse: bytes -> option (a & bytes);
@@ -58,12 +108,40 @@ noeq type parser_serializer_unit (bytes:Type0) {|bytes_like bytes|} (a:Type) = {
   )
 }
 
+/// What is the reason behind `parser_serializer_unit` and `parser_serializer`?
+/// In some functions (such as `pse_list` which is used to build `ps_seq` or `ps_bytes`),
+/// it is useful to know that `parse` will never consume 0 bytes, and `serialize` will never return `bytes_empty`.
+/// Such types only have one element, hence are isomorphic to `unit`. They are (anti-)recognized by the `is_not_unit` predicate.
+/// Thus they depend on a `parser_serializer` which doesn't serialize/parse a unit type.
+/// It is however very useful to be able to parse a unit type, in the example of an optional:
+///   struct {
+///       uint8 present;
+///       select (present) {
+///           case 0: struct{}; //<-- parsed with ps_unit!
+///           case 1: T value;
+///       }
+///   } optional<T>;
+/// In this interface, we tried to use `parser_serializer` for return types when possible,
+/// and to use `parser_serializer_unit` for argument types when possible.
+/// They are named `parser_serializer_unit` / `parser_serializer` and not `parser_serializer` / `parser_serializer_nonempty`
+/// because `parser_serializer_nonempty` is ugly, and it's the type that is the most used by the user.
+
 val is_not_unit: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:parser_serializer_unit bytes a -> Type0
 let parser_serializer (bytes:Type0) {|bytes_like bytes|} (a:Type) = ps_a:parser_serializer_unit bytes a{is_not_unit ps_a}
 
 (*** Parser combinators ***)
 
+/// A parser for dependant pairs.
+/// It can be used both to parse (non-dependant pairs), hence records,
+/// or tagged-union-like structures (the second value depend on the tag), hence sum types.
+
 val bind: #a:Type -> #b:(a -> Type) -> #bytes:Type0 -> {| bytes_like bytes |} -> ps_a:parser_serializer_unit bytes a -> ps_b:(xa:a -> parser_serializer_unit bytes (b xa)) -> parser_serializer_unit bytes (dtuple2 a b)
+
+/// On concrete bytes we actually have an equivalence between the `requires` and the `ensures`.
+/// On symbolic bytes where you may have multiple bytes of length 0, this is not true anymore.
+/// Hopefully, we only need this implication:
+/// the other would be useful to prove that a predicate do parse the unit type,
+/// and this is not something we actually need.
 
 val bind_is_not_unit: #a:Type -> #b:(a -> Type) -> #bytes:Type0 -> {| bytes_like bytes |} -> ps_a:parser_serializer_unit bytes a -> ps_b:(xa:a -> parser_serializer_unit bytes (b xa)) -> Lemma
   (requires is_not_unit ps_a \/ (forall xa. is_not_unit (ps_b xa)))
@@ -99,11 +177,14 @@ let mk_isomorphism_between (#a:Type) (#b:Type) (a_to_b:a -> b) (b_to_a:b -> a):
     b_to_a_to_b = (fun _ -> ());
   }
 
+/// The workflow to use this parser framework is to use `bind` to parse a big nested dependant pair,
+/// then use the `isomorphism` transformer to derive a parser for your actual type.
 val isomorphism:
   #a:Type -> #bytes:Type0 -> {| bytes_like bytes |} -> b:Type ->
   ps_a:parser_serializer_unit bytes a -> iso:isomorphism_between a b ->
   parser_serializer_unit bytes b
 
+/// This type we have the equivalence even with symbolic bytes, but we don't need it so we can keep a consistent interface.
 val isomorphism_is_not_unit:
   #a:Type -> #bytes:Type0 -> {| bytes_like bytes |} -> b:Type ->
   ps_a:parser_serializer_unit bytes a -> iso:isomorphism_between a b ->
@@ -161,6 +242,21 @@ val ps_uint_is_valid:
   [SMTPat ((ps_uint sz).is_valid pre x)]
 
 (*** Exact parsers ***)
+
+/// This structure describe the non-composable interface for parser
+/// The lemmas are similar (but simpler!) as the ones in `parser_serializer_unit`
+///
+/// -- Begin parenthesis --
+///
+/// Actually, these parsers are useful for composability purposes.
+/// Here is how we construct a `parser_serializer (list a)` given a `parser_serializer a:
+///
+/// Step 1: use `pse_list` to construct a `parser_serializer_exact (list a)` using `parser_serializer a`.
+/// This exact parser runs repeatedly the parser of a to the bytes, to construct a list of a.
+///
+/// Step 2: use `pse_to_ps` that first read a prefix containing the length, then slice the input bytes to have exactly the bytes containing the list and feed it to the exact parser.
+///
+/// -- End parenthesis --
 
 noeq type parser_serializer_exact (bytes:Type0) {|bytes_like bytes|} (a:Type) = {
   parse_exact: bytes -> option a;
