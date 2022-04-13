@@ -180,26 +180,62 @@ let mk_isomorphism_between (#a:Type) (#b:Type) (a_to_b:a -> b) (b_to_a:b -> a):
 /// The workflow to use this parser framework is to use `bind` to parse a big nested dependant pair,
 /// then use the `isomorphism` transformer to derive a parser for your actual type.
 val isomorphism:
-  #a:Type -> #bytes:Type0 -> {| bytes_like bytes |} -> b:Type ->
+  #a:Type -> #bytes:Type0 -> {| bytes_like bytes |} -> #b:Type ->
   ps_a:parser_serializer_unit bytes a -> iso:isomorphism_between a b ->
   parser_serializer_unit bytes b
 
+/// This helper function is extremely valuable to help F*'s type inference.
+/// Using it, F* is able to automatically deduce the type of `a`, which is often ugly.
+/// (This is in general why you use `isomorphism`: because you want to replace the ugly `a` with a nicer `b`)
+let mk_isomorphism
+  (#a:Type) (#bytes:Type0) {| bytes_like bytes |} (b:Type)
+  (ps_a:parser_serializer_unit bytes a) (a_to_b:a -> b) (b_to_a:b -> a):
+  Pure (parser_serializer_unit bytes b)
+    (requires (forall x. a_to_b (b_to_a x) == x) /\ (forall x. b_to_a (a_to_b x) == x))
+    (ensures fun _ -> True)
+  =
+  isomorphism ps_a (mk_isomorphism_between a_to_b b_to_a)
+
 /// This type we have the equivalence even with symbolic bytes, but we don't need it so we can keep a consistent interface.
 val isomorphism_is_not_unit:
-  #a:Type -> #bytes:Type0 -> {| bytes_like bytes |} -> b:Type ->
+  #a:Type -> #bytes:Type0 -> {| bytes_like bytes |} -> #b:Type ->
   ps_a:parser_serializer_unit bytes a -> iso:isomorphism_between a b ->
   Lemma
     (requires is_not_unit ps_a)
-    (ensures is_not_unit (isomorphism b ps_a iso))
-    [SMTPat (is_not_unit (isomorphism b ps_a iso))]
+    (ensures is_not_unit (isomorphism ps_a iso))
+    [SMTPat (is_not_unit (isomorphism ps_a iso))]
 
 val isomorphism_is_valid:
-  #a:Type -> #bytes:Type0 -> {| bytes_like bytes |} -> b:Type ->
+  #a:Type -> #bytes:Type0 -> {| bytes_like bytes |} -> #b:Type ->
   ps_a:parser_serializer_unit bytes a -> iso:isomorphism_between a b ->
   pre:bytes_compatible_pre bytes -> xb:b ->
   Lemma
-  ((isomorphism b ps_a iso).is_valid pre xb <==> ps_a.is_valid pre (iso.b_to_a xb))
-  [SMTPat ((isomorphism b ps_a iso).is_valid pre xb)]
+  ((isomorphism ps_a iso).is_valid pre xb <==> ps_a.is_valid pre (iso.b_to_a xb))
+  [SMTPat ((isomorphism ps_a iso).is_valid pre xb)]
+
+
+// Introducing this type helps SMTPats to avoid dealing with the lambda `fun x -> pred x`
+type refined (a:Type) (pred:a -> bool) = x:a{pred x}
+
+/// Parser for a refinement.
+val refine:
+  #a:Type -> #bytes:Type0 -> {| bytes_like bytes |} ->
+  parser_serializer_unit bytes a -> pred:(a -> bool) -> parser_serializer_unit bytes (refined a pred)
+
+val refine_is_not_unit:
+  #a:Type -> #bytes:Type0 -> {| bytes_like bytes |} ->
+  ps_a:parser_serializer_unit bytes a -> pred:(a -> bool) ->
+  Lemma
+    (requires is_not_unit ps_a)
+    (ensures is_not_unit (refine ps_a pred))
+    [SMTPat (is_not_unit (refine ps_a pred))]
+
+val refine_is_valid:
+  #a:Type -> #bytes:Type0 -> {| bytes_like bytes |} ->
+  ps_a:parser_serializer bytes a -> pred:(a -> bool) ->
+  pre:bytes_compatible_pre bytes -> x:a{pred x} ->
+  Lemma ((refine ps_a pred).is_valid pre x <==> ps_a.is_valid pre x)
+  [SMTPat ((refine ps_a pred).is_valid pre x)]
 
 (*** Parser for basic types ***)
 

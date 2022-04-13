@@ -148,7 +148,7 @@ let bind_is_not_unit #a #b #bytes ps_a ps_b =
 
 let bind_is_valid #a #b #bytes #bl ps_a ps_b pre xa xb = ()
 
-let isomorphism #a #bytes b ps_a iso =
+let isomorphism #a #bytes #bl #b ps_a iso =
   let parse_b buf =
     match ps_a.parse buf with
     | Some (xa, l) -> Some (iso.a_to_b xa, l)
@@ -187,9 +187,30 @@ let isomorphism #a #bytes b ps_a iso =
   } in
   res
 
-let isomorphism_is_not_unit #a #bytes #bl b ps_a iso = ()
+let isomorphism_is_not_unit #a #bytes #bl #b ps_a iso = ()
 
-let isomorphism_is_valid #a #bytes #bl b ps_a iso pre xb = ()
+let isomorphism_is_valid #a #bytes #bl #b ps_a iso pre xb = ()
+
+let refine #a #bytes #bl ps_a pred =
+  {
+    parse = (fun buf ->
+      match ps_a.parse buf with
+      | Some (x, suffix) ->
+        if pred x then Some ((x <: refined a pred), suffix)
+        else None
+      | None -> None
+    );
+    serialize = (fun x -> ps_a.serialize x);
+    parse_serialize_inv = (fun x suffix -> ps_a.parse_serialize_inv x suffix);
+    serialize_parse_inv = (fun buf -> ps_a.serialize_parse_inv buf);
+    is_valid = (fun pre (x:a{pred x}) -> ps_a.is_valid pre x);
+    parse_pre = (fun pre buf -> ps_a.parse_pre pre buf);
+    serialize_pre = (fun pre xb -> ps_a.serialize_pre pre xb);
+  }
+
+let refine_is_not_unit #a #bytes #bl ps_a pred = ()
+
+let refine_is_valid #a #bytes #bl ps_a pred pre x = ()
 
 (*** Parser for basic types ***)
 
@@ -213,9 +234,9 @@ let ps_lbytes #bytes #bl n =
     if length buf < n then
       None
     else (
-      slice_length buf 0 n;
-      match slice #bytes #bl buf 0 n, slice #bytes #bl buf n (length buf) with
-      | Some x, Some suffix -> Some (x, suffix)
+      split_length buf n;
+      match split #bytes #bl buf n with
+      | Some (x, suffix) -> Some (x, suffix)
       | _ -> None
     )
   in
@@ -228,14 +249,13 @@ let ps_lbytes #bytes #bl n =
     serialize = serialize_lbytes;
     parse_serialize_inv = (fun b suffix ->
       concat_length b suffix;
-      slice_concat_left b suffix;
-      slice_concat_right b suffix
+      split_concat b suffix
     );
     serialize_parse_inv = (fun (buf:bytes) ->
       match parse_lbytes buf with
       | None -> ()
       | Some (b, suffix) -> (
-        concat_slice buf n
+        concat_split buf n
       )
     );
     is_valid = (fun pre b -> pre b);
@@ -591,15 +611,9 @@ let ps_list #bytes #bl #a r ps_a =
 let ps_seq #bytes #bl #a r ps_a =
   FStar.Classical.forall_intro (Seq.lemma_list_seq_bij #a);
   FStar.Classical.forall_intro (Seq.lemma_seq_list_bij #a);
-  let iso = mk_isomorphism_between
-    #_ #(blseq a ps_a r)
+  mk_isomorphism (blseq a ps_a r) (ps_list r ps_a)
     (fun (l:bllist a ps_a r) -> Seq.seq_of_list l)
     (fun (s:blseq a ps_a r) -> Seq.seq_to_list s)
-  in
-  isomorphism
-    (blseq a ps_a r)
-    (ps_list r ps_a)
-    iso
 
 let ps_seq_is_valid #bytes #bl #a r ps_a pre x = ()
 
