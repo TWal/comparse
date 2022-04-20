@@ -301,24 +301,6 @@ let ps_uint #bytes #bl sz =
 
 let ps_uint_is_valid #bytes #bl sz pre x = ()
 
-(*
-val ps_uint: t:IT.inttype{IT.unsigned t /\ ~(IT.U1? t)} -> parser_serializer (IT.uint_t t IT.SEC)
-let ps_uint t =
-  let nbytes = IT.numbytes t in
-  isomorphism_explicit (IT.uint_t t IT.SEC)
-    (ps_lbytes nbytes)
-    (fun b -> uint_from_bytes_be b)
-    (fun x -> uint_to_bytes_be x)
-    (fun b -> lemma_uint_from_to_bytes_be_preserves_value #t #IT.SEC b)
-    (fun x -> lemma_uint_to_from_bytes_be_preserves_value x)
-
-let ps_u8 = ps_uint IT.U8
-let ps_u16 = ps_uint IT.U16
-let ps_u32 = ps_uint IT.U32
-let ps_u64 = ps_uint IT.U64
-let ps_u128 = ps_uint IT.U128
-*)
-
 (*** Exact parsers ***)
 
 let ps_to_pse #bytes #bl #a ps_a =
@@ -475,49 +457,8 @@ let pse_list_is_valid #bytes #bl #a ps_a pre l =
 
 (*** Parser for variable-length lists ***)
 
-type nat_in_range (r:size_range) = n:nat{in_range r n}
-
-val ps_nat_in_range: #bytes:Type0 -> {|bytes_like bytes|} -> r:size_range -> parser_serializer bytes (nat_in_range r)
-let ps_nat_in_range #bytes #bl r =
-  let sz =
-    if r.max < pow2 8 then 1
-    else if r.max < pow2 16 then 2
-    else if r.max < pow2 32 then 4
-    else 8
-  in
-  assert_norm (r.max < pow2 64);
-  let parse (buf:bytes): option (nat_in_range r & bytes) =
-    match (ps_uint sz).parse buf with
-    | None -> None
-    | Some (n, suffix) ->
-      if in_range r n then
-        Some (n, suffix)
-      else
-        None
-  in
-  let serialize (n:nat_in_range r): list bytes =
-    (ps_uint #bytes sz).serialize n
-  in
-  let is_valid (pre:bytes_compatible_pre bytes) (n:nat_in_range r): Type0 =
-    (ps_uint #bytes sz).is_valid pre n
-  in
-  {
-    parse = parse;
-    serialize = serialize;
-    parse_serialize_inv = (fun x suffix ->
-      (ps_uint sz).parse_serialize_inv x suffix
-    );
-    serialize_parse_inv = (fun (buf:bytes) ->
-      (ps_uint sz).serialize_parse_inv buf
-    );
-    is_valid = is_valid;
-    parse_pre = (fun pre buf -> (ps_uint sz).parse_pre pre buf);
-    serialize_pre = (fun pre x -> (ps_uint sz).serialize_pre pre x);
-  }
-
-val parser_serializer_exact_to_parser_serializer: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> r:size_range -> pse_a:parser_serializer_exact bytes a{forall x. in_range r (length (pse_a.serialize_exact x))} -> parser_serializer bytes a
-let parser_serializer_exact_to_parser_serializer #bytes #bl #a r pse_a =
-  let ps_nat = ps_nat_in_range r in
+val parser_serializer_exact_to_parser_serializer: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> length_pre:(nat -> bool) -> nat_parser_serializer bytes length_pre -> pse_a:parser_serializer_exact bytes a{forall x. length_pre (length (pse_a.serialize_exact x))} -> parser_serializer bytes a
+let parser_serializer_exact_to_parser_serializer #bytes #bl #a length_pre ps_nat pse_a =
   let parse_a (buf:bytes) =
     match ps_nat.parse buf with
     | None -> None
@@ -577,19 +518,19 @@ let parser_serializer_exact_to_parser_serializer #bytes #bl #a r pse_a =
     );
   }
 
-type bllist (#bytes:Type0) {|bytes_like bytes|} (a:Type) (ps_a:parser_serializer bytes a) (r:size_range) = l:list a{in_range r (bytes_length ps_a l)}
+type pre_length_list (#bytes:Type0) {|bytes_like bytes|} (a:Type) (ps_a:parser_serializer bytes a) (pre_length:nat -> bool) = l:list a{pre_length (bytes_length ps_a l)}
 
-val ps_list: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> r:size_range -> ps_a:parser_serializer bytes a -> parser_serializer bytes (bllist a ps_a r)
-let ps_list #bytes #bl #a r ps_a =
+val ps_pre_length_list: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> pre_length:(nat -> bool) -> ps_length:nat_parser_serializer bytes pre_length -> ps_a:parser_serializer bytes a -> parser_serializer bytes (pre_length_list a ps_a pre_length)
+let ps_pre_length_list #bytes #bl #a pre_length ps_length ps_a =
   let pse_la = pse_list ps_a in
-  let pse_bllist_a: parser_serializer_exact bytes (bllist a ps_a r) =
+  let pse_pre_length_list_a: parser_serializer_exact bytes (pre_length_list a ps_a pre_length) =
     {
       parse_exact = (fun buf ->
-        if in_range r (length buf) then
+        if pre_length (length buf) then
           match pse_la.parse_exact buf with
           | Some x ->
             pse_la.serialize_parse_inv_exact buf;
-            Some (x <: bllist a ps_a r)
+            Some (x <: pre_length_list a ps_a pre_length)
           | None -> None
         else
           None
@@ -606,28 +547,19 @@ let ps_list #bytes #bl #a r ps_a =
       serialize_pre_exact = (fun pre x -> (pse_list ps_a).serialize_pre_exact pre x);
     }
   in
-  parser_serializer_exact_to_parser_serializer r pse_bllist_a
+  parser_serializer_exact_to_parser_serializer pre_length ps_length pse_pre_length_list_a
 
-let ps_seq #bytes #bl #a r ps_a =
-  FStar.Classical.forall_intro (Seq.lemma_list_seq_bij #a);
-  FStar.Classical.forall_intro (Seq.lemma_seq_list_bij #a);
-  mk_isomorphism (blseq a ps_a r) (ps_list r ps_a)
-    (fun (l:bllist a ps_a r) -> Seq.seq_of_list l)
-    (fun (s:blseq a ps_a r) -> Seq.seq_to_list s)
-
-let ps_seq_is_valid #bytes #bl #a r ps_a pre x = ()
-
-let ps_bytes #bytes #bl r =
-  let parse_bytes (buf:bytes): option (blbytes bytes r) =
-    if in_range r (length (buf <: bytes)) then
+let ps_pre_length_bytes #bytes #bl pre_length ps_length =
+  let parse_bytes (buf:bytes): option (pre_length_bytes bytes pre_length) =
+    if pre_length (length (buf <: bytes)) then
       Some buf
     else
       None
   in
-  let serialize_bytes (buf:blbytes bytes r): bytes =
+  let serialize_bytes (buf:pre_length_bytes bytes pre_length): bytes =
     buf
   in
-  let pse_bytes: parser_serializer_exact bytes (blbytes bytes r)=
+  let pse_bytes: parser_serializer_exact bytes (pre_length_bytes bytes pre_length)=
     {
       parse_exact = parse_bytes;
       serialize_exact = serialize_bytes;
@@ -638,6 +570,186 @@ let ps_bytes #bytes #bl r =
       serialize_pre_exact = (fun pre x -> ());
     }
   in
-  parser_serializer_exact_to_parser_serializer r pse_bytes
+  parser_serializer_exact_to_parser_serializer pre_length ps_length pse_bytes
 
-let ps_bytes_is_valid #bytes #bl r pre x = ()
+let ps_pre_length_bytes_is_valid #bytes #bl pre_length ps_length pre x = ()
+
+let ps_pre_length_seq #bytes #bl #a pre_length ps_length ps_a =
+  FStar.Classical.forall_intro (Seq.lemma_list_seq_bij #a);
+  FStar.Classical.forall_intro (Seq.lemma_seq_list_bij #a);
+  mk_isomorphism (pre_length_seq a ps_a pre_length) (ps_pre_length_list pre_length ps_length ps_a)
+    (fun (l:pre_length_list a ps_a pre_length) -> Seq.seq_of_list l)
+    (fun (s:pre_length_seq a ps_a pre_length) -> Seq.seq_to_list s)
+
+let ps_pre_length_seq_is_valid #bytes #bl #a pre_length ps_length ps_a pre x = ()
+
+let ps_nat_in_range #bytes #bl r =
+  let sz =
+    if r.max < pow2 8 then 1
+    else if r.max < pow2 16 then 2
+    else if r.max < pow2 32 then 4
+    else 8
+  in
+  assert_norm (r.max < pow2 64);
+  mk_isomorphism (refined nat (in_range r)) (refine (ps_uint sz) (in_range r)) (fun n -> n) (fun n -> n)
+
+val _parse_nat: #bytes:Type0 -> {| bytes_like bytes |} -> b:bytes -> Tot (option (nat & bytes)) (decreases length b)
+let rec _parse_nat #bytes #bl b =
+  if length b = 0 then (
+    None
+  ) else (
+    split_length b 1;
+    match split #bytes b 1 with
+    | None -> None
+    | Some (l, r) -> (
+      if length l <> 1 then (
+        None
+      ) else (
+        match to_nat #bytes 1 l with
+        | None -> None
+        | Some l_value -> (
+          if l_value = 0 then (
+            Some (0, r)
+          ) else if l_value = 1 then (
+            match _parse_nat r with
+            | None -> None
+            | Some (result, suffix) -> Some (1+result, suffix)
+          ) else (
+            None
+          )
+        )
+      )
+    )
+  )
+
+val _serialize_nat: #bytes:Type0 -> {| bytes_like bytes |} -> nat -> list bytes
+let rec _serialize_nat #bytes #bl n =
+  assert_norm (1 < pow2 (8 `op_Multiply` 1));
+  if n = 0 then [from_nat 1 0]
+  else ((from_nat 1 1)::(_serialize_nat (n-1)))
+
+#push-options "--fuel 1"
+val ps_nat_unary: #bytes:Type0 -> {| bytes_like bytes |} -> parser_serializer bytes nat
+let ps_nat_unary #bytes #bl =
+  let rec parse_serialize_inv (n:nat) (suffix:bytes): Lemma (_parse_nat (add_prefixes (_serialize_nat n) suffix) == Some (n, suffix)) =
+    if n = 0 then (
+      assert_norm (add_prefixes #bytes [from_nat 1 0] suffix == concat (from_nat 1 0) suffix);
+      concat_length #bytes (from_nat 1 0) suffix;
+      split_concat #bytes (from_nat 1 0) suffix;
+      split_length (concat #bytes (from_nat 1 0) suffix) 1;
+      from_to_nat #bytes 1 0
+    ) else (
+      parse_serialize_inv (n-1) suffix;
+      concat_length #bytes (from_nat 1 1) (add_prefixes (_serialize_nat (n-1)) suffix);
+      split_concat #bytes (from_nat 1 1) (add_prefixes (_serialize_nat (n-1)) suffix);
+      split_length (concat #bytes (from_nat 1 1) (add_prefixes (_serialize_nat (n-1)) suffix)) 1;
+      from_to_nat #bytes 1 1
+    )
+  in
+  let rec serialize_parse_inv (buf:bytes): Lemma (ensures (match _parse_nat buf with | Some (x, suffix) -> buf == add_prefixes (_serialize_nat x) suffix | None -> True)) (decreases length buf) =
+    match _parse_nat buf with
+    | None -> ()
+    | Some (n, suffix) -> (
+      let (l, r) = Some?.v (split #bytes buf 1) in
+      let l_value = Some?.v (to_nat #bytes 1 l) in
+      if l_value = 0 then (
+        to_from_nat 1 l;
+        concat_split buf 1;
+        assert_norm (add_prefixes #bytes [from_nat 1 0] suffix == concat (from_nat 1 0) suffix)
+      ) else if l_value = 1 then (
+        to_from_nat 1 l;
+        concat_split buf 1;
+        split_length (concat #bytes l r) 1;
+        serialize_parse_inv r
+      ) else (
+        ()
+      )
+    )
+  in
+  let rec parse_pre (pre:bytes_compatible_pre bytes) (buf:bytes{pre buf}): Lemma (ensures (match _parse_nat buf with | Some (x, suffix) -> pre suffix | None -> True)) (decreases length #bytes buf) =
+    match _parse_nat #bytes buf with
+    | None -> ()
+    | Some (n, suffix) ->
+      let (l, r) = Some?.v (split #bytes buf 1) in
+      let l_value = Some?.v (to_nat #bytes 1 l) in
+      if l_value = 1 then (
+        concat_split #bytes buf 1;
+        split_length (concat #bytes l r) 1;
+        parse_pre pre r
+      ) else (
+        ()
+      )
+  in
+  let rec serialize_pre (pre:bytes_compatible_pre bytes) (n:nat): Lemma (for_allP pre (_serialize_nat n)) =
+    if n = 0 then (
+      assert_norm (for_allP pre (_serialize_nat 0) <==> pre (from_nat 1 0))
+    ) else (
+      serialize_pre pre (n-1)
+    )
+  in
+
+  {
+    parse = _parse_nat;
+    serialize = _serialize_nat;
+    parse_serialize_inv = parse_serialize_inv;
+    serialize_parse_inv = serialize_parse_inv;
+    is_valid = (fun _ _ -> True);
+    parse_pre = (fun pre buf -> parse_pre pre buf);
+    serialize_pre = (fun pre x -> serialize_pre pre x);
+  }
+#pop-options
+
+open FStar.Mul
+
+val find_nbytes_aux: n:pos -> acc:nat -> Pure nat (requires pow2 (8 * acc) <= n)
+  (ensures fun res -> pow2 (8 * res) <= n /\ n < pow2 (8 * (res+1)))
+  (decreases n - pow2 (8 * acc))
+let rec find_nbytes_aux n acc =
+  if n < pow2 (8* (acc+1)) then
+    acc
+  else (
+    Math.Lemmas.pow2_lt_compat (8 * (acc+1)) (8 * acc);
+    find_nbytes_aux n (acc+1)
+  )
+
+val find_nbytes: n:nat -> Pure nat (requires True)
+  (ensures fun res -> (n == 0 /\ res == 0) \/ (pow2 (8 * res) <= n /\ n < pow2 (8 * (res+1))))
+let find_nbytes n =
+  if n = 0 then 0
+  else (
+    assert_norm(pow2 (8*0) == 1);
+    find_nbytes_aux n 0
+  )
+
+// Use a "slow" nat parser to derive a more compact one
+val ps_nat_accelerate: #bytes:Type0 -> {|bytes_like bytes|} -> parser_serializer bytes nat -> parser_serializer bytes nat
+let ps_nat_accelerate #bytes #bl ps_nat_slow =
+  let nbytes_to_pred (nbytes:nat) (n:nat) = (nbytes = 0 && n = 0) || (pow2 (8 * nbytes)) <= n in
+  introduce forall (nbytes:nat) (n:nat_lbytes (nbytes+1)). pow2 (8 * nbytes) <= n ==> nbytes == find_nbytes n with (
+    if pow2 (8 * nbytes) <= n then (
+      let found_nbytes = find_nbytes n in
+      if nbytes < found_nbytes then (
+        Math.Lemmas.pow2_le_compat (8 * found_nbytes) (8 * (nbytes+1));
+        assert(False)
+      ) else if found_nbytes < nbytes then (
+        Math.Lemmas.pow2_le_compat (8 * nbytes) (8 * (found_nbytes+1));
+        assert(False)
+      ) else (
+        ()
+      )
+    ) else (
+      ()
+    )
+  );
+  mk_isomorphism nat
+    (
+      bind #nat #(fun nbytes -> refined (nat_lbytes (nbytes+1)) (nbytes_to_pred nbytes)) ps_nat_slow (fun nbytes ->
+        refine (ps_uint (nbytes+1)) (nbytes_to_pred nbytes)
+      )
+    )
+    (fun (|nbytes, n|) -> n)
+    (fun n -> (|find_nbytes n, n|))
+
+let ps_true_nat #bytes #bl =
+  assert_norm(forall pre n. (ps_nat_unary #bytes).is_valid pre n); //???
+  mk_isomorphism (refined nat true_nat_pred) (ps_nat_accelerate ps_nat_unary) (fun n -> n) (fun n -> n)
