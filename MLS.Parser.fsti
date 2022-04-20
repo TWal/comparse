@@ -196,6 +196,15 @@ let mk_isomorphism
   =
   isomorphism ps_a (mk_isomorphism_between a_to_b b_to_a)
 
+let mk_trivial_isomorphism
+  (#a:Type) (#b:Type) (#bytes:Type0) {| bytes_like bytes |}
+  (ps_a:parser_serializer_unit bytes a):
+  Pure (parser_serializer_unit bytes b)
+    (requires a `subtype_of` b /\ b `subtype_of` a)
+    (ensures fun _ -> True)
+  =
+  mk_isomorphism b ps_a (fun x -> x) (fun x -> x)
+
 /// This type we have the equivalence even with symbolic bytes, but we don't need it so we can keep a consistent interface.
 val isomorphism_is_not_unit:
   #a:Type -> #bytes:Type0 -> {| bytes_like bytes |} -> #b:Type ->
@@ -397,12 +406,12 @@ val ps_true_nat: #bytes:Type0 -> {| bytes_like bytes |} -> nat_parser_serializer
 
 // Might always be useful
 let ps_nat (#bytes:Type0) {|bytes_like bytes|}: parser_serializer bytes nat =
-  mk_isomorphism nat ps_true_nat (fun n -> n) (fun n -> n)
+  mk_trivial_isomorphism ps_true_nat
 
 let ps_bytes (#bytes:Type0) {|bytes_like bytes|}: parser_serializer bytes bytes =
-  mk_isomorphism bytes (ps_pre_length_bytes true_nat_pred ps_true_nat) (fun b -> b) (fun b -> b)
+  mk_trivial_isomorphism (ps_pre_length_bytes true_nat_pred ps_true_nat)
 
 let ps_seq (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a): parser_serializer bytes (Seq.seq a) =
-  mk_isomorphism (Seq.seq a) (ps_pre_length_seq true_nat_pred ps_true_nat ps_a) (fun s -> s) (fun s -> s)
+  mk_trivial_isomorphism (ps_pre_length_seq true_nat_pred ps_true_nat ps_a)
 
 /// TODO: QUIC-style length
