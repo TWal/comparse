@@ -9,6 +9,9 @@ let rec for_allP (#a:Type) (pre:a -> Type0) (l:list a): Type0 =
     | [] -> True
     | h::t -> pre h /\ for_allP pre t
 
+val for_allP_eq: #a:Type -> pre:(a -> Type0) -> l:list a ->
+  Lemma (for_allP pre l <==> (forall x. List.Tot.memP x l ==> pre x))
+
 ///   add_prefixes [prefix0; prefix1; ...; prefixn] suffix
 /// = concat prefix0 (concat prefix1 (... (concat prefixn suffix)))`
 val add_prefixes: #bytes:Type0 -> {|bytes_like bytes|} -> list (bytes) -> bytes -> bytes

@@ -5,6 +5,13 @@ open MLS.Bytes
 
 #set-options "--fuel 0 --ifuel 2"
 
+#push-options "--fuel 1"
+let rec for_allP_eq #a pre l =
+  match l with
+  | [] -> ()
+  | h::t -> for_allP_eq pre t
+#pop-options
+
 let rec add_prefixes #bytes #bl l suffix =
   match l with
   | [] -> suffix
