@@ -216,27 +216,27 @@ let mk_record_isomorphism result_type constructor_name constructor_types (parser
 // Annotation
 let with_tag (#a:Type0) (x:a) = ()
 
-val get_tag_from_annot: name -> list term -> Tac (typ & term)
+val get_tag_from_annot: name -> list term -> option (typ & term)
 let rec get_tag_from_annot ctor_name l =
   match l with
-  | [] -> fail ("get_tag_from_annot: no annotation for constructor " ^ (implode_qn ctor_name))
+  | [] -> None
   | h::t -> (
     let (head, args) = collect_app h in
     if term_eq head (`with_tag) && List.Tot.length args = 2 then (
       let [(tag_typ, _); (tag_val, _)] = args in
-      (tag_typ, tag_val)
+      Some (tag_typ, tag_val)
     ) else (
       get_tag_from_annot ctor_name t
     )
   )
 
-val get_tag_from_ctor: ctor -> Tac (typ & term)
+val get_tag_from_ctor: ctor -> Tac (option (typ & term))
 let get_tag_from_ctor (ctor_name, ctor_typ) =
   match inspect ctor_typ with
   | Tv_Arrow b _ ->
     let _, (_, annotations) = inspect_binder b in
     get_tag_from_annot ctor_name annotations
-  | _ -> fail "get_tag: not an arrow"
+  | _ -> fail "get_tag_from_ctor: not an arrow"
 
 val sanitize_tags: list (typ & term) -> Tac (typ & (list term))
 let sanitize_tags tags =
@@ -248,7 +248,27 @@ let sanitize_tags tags =
   in
   (tag_typ, tag_vals)
 
-val mk_tag_parser: typ -> list typ -> Tac parser_term
+val get_tag_from_ctors: list ctor -> Tac (typ & (list term))
+let get_tag_from_ctors ctors =
+  let opt_tags = Tactics.Util.map get_tag_from_ctor ctors in
+  if List.Tot.for_all (Some?) opt_tags then (
+    let tags = Tactics.Util.map (fun (opt_tag:option(typ & term)) -> guard (Some? opt_tag); Some?.v opt_tag) opt_tags in
+    sanitize_tags tags
+  ) else if List.Tot.for_all (None?) opt_tags then (
+    let rec find_nbytes (n:nat): Tac nat =
+      if List.Tot.length ctors < pow2 (8 `op_Multiply` n) then
+        n
+      else
+        find_nbytes (n+1)
+    in
+    let nbytes = find_nbytes 0 in
+    let pack_int i = pack (Tv_Const (C_Int i)) in
+    (mk_e_app (`nat_lbytes) [pack_int nbytes], Tactics.Util.mapi (fun i _ -> pack_int i) ctors)
+  ) else (
+    fail "Inconsistent tag annotation"
+  )
+
+val mk_tag_parser: typ -> list term -> Tac parser_term
 let mk_tag_parser tag_typ tag_vals =
   let pred =
     let tag_bv = fresh_bv tag_typ in
@@ -426,8 +446,7 @@ let mk_sum_isomorphism tag_typ result_typ tag_to_pair_typ tag_vals ctors (pairs_
 
 val mk_sum_type_parser: list ctor -> typ -> Tac parser_term
 let mk_sum_type_parser ctors result_type =
-  let tags = Tactics.Util.map get_tag_from_ctor ctors in
-  let (tag_typ, tag_vals) = sanitize_tags tags in
+  let (tag_typ, tag_vals) = get_tag_from_ctors ctors in
   let tag_parser_term = mk_tag_parser tag_typ tag_vals in
   let (tag_parser, tag_typ) = tag_parser_term in
   let (middle_sum_type_parser_term, tag_to_pair_typ) = mk_middle_sum_type_parser tag_parser_term tag_vals ctors in
@@ -516,14 +535,25 @@ assume val blbytes: nat -> Type0
 assume val ps_blbytes: n:nat -> parser_serializer (blbytes n)
 
 noeq type test_type3 =
-  | Test_1: [@@@with_tag #(nat_lbytes 1) 1] char -> char -> char -> char -> char -> char -> char -> test_type3
-  | Test_2: [@@@with_tag #(nat_lbytes 1) 2] char -> char -> char -> char -> test_type3
-  | Test_3: [@@@with_tag #(nat_lbytes 1) 3] blbytes 256 -> test_type3
-  | Test_4: [@@@with_tag #(nat_lbytes 1) 4] char -> test_type3
-  | Test_5: [@@@with_tag #(nat_lbytes 1) 5] char -> test_type3
+  | Test3_1: [@@@with_tag #(nat_lbytes 1) 1] char -> char -> char -> char -> char -> char -> char -> test_type3
+  | Test3_2: [@@@with_tag #(nat_lbytes 1) 2] char -> char -> char -> char -> test_type3
+  | Test3_3: [@@@with_tag #(nat_lbytes 1) 3] blbytes 256 -> test_type3
+  | Test3_4: [@@@with_tag #(nat_lbytes 1) 4] char -> test_type3
+  | Test3_5: [@@@with_tag #(nat_lbytes 1) 5] char -> test_type3
 
 #push-options "--fuel 0 --ifuel 1"
 %splice [ps_test_type3] (gen_parser (`test_type3))
+#pop-options
+
+noeq type test_type3_2 =
+  | Test32_1: char -> char -> char -> char -> char -> char -> char -> test_type3_2
+  | Test32_2: char -> char -> char -> char -> test_type3_2
+  | Test32_3: blbytes 256 -> test_type3_2
+  | Test32_4: char -> test_type3_2
+  | Test32_5: char -> test_type3_2
+
+#push-options "--fuel 0 --ifuel 1"
+%splice [ps_test_type3_2] (gen_parser (`test_type3_2))
 #pop-options
 
 noeq type test_type4 = {
