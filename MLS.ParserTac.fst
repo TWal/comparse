@@ -59,6 +59,25 @@ let my_l_to_r l =
   in
   ctrl_rewrite BottomUp ctrl rw
 
+(*** Handle annotations ***)
+
+val find_annotation_in_list: list term -> term -> Tac (option (list term))
+let rec find_annotation_in_list l expected_hd =
+  match l with
+  | [] -> None
+  | h::t -> (
+    let (head, args) = collect_app h in
+    if term_eq head expected_hd then (
+      Some (List.Tot.map (fun (x, _) -> x) args)
+    ) else (
+      find_annotation_in_list t expected_hd
+    )
+  )
+
+val find_annotation_in_binder: binder -> term -> Tac (option (list term))
+let find_annotation_in_binder b expected_hd =
+  let _, (_, annotations) = inspect_binder b in
+  find_annotation_in_list annotations expected_hd
 
 (*** Utility functions ***)
 
@@ -86,6 +105,18 @@ let parser_from_type t =
     (mk_app parser_type_unapplied type_args, t)
   | _ -> fail "parser_from_type: head given by `collect_app` is not a fv?"
 
+let with_parser (#a:Type0) (x:parser_serializer a) = ()
+
+val parser_from_binder: binder -> Tac parser_term
+let parser_from_binder b =
+  match find_annotation_in_binder b (`with_parser) with
+  | None ->
+    parser_from_type (type_of_binder b)
+  | Some [typ; ps_typ] ->
+    guard (term_eq typ (type_of_binder b));
+    (ps_typ, typ)
+  | Some _ -> fail "parser_from_binder: malformed annotation"
+
 val mk_parser_unit: unit -> parser_term
 let mk_parser_unit () =
   (`ps_unit, `unit)
@@ -98,17 +129,17 @@ let mk_const_function ty t =
 
 val mk_parser_pair: parser_term -> parser_term -> Tac parser_term
 let mk_parser_pair (ps_a, t_a) (ps_b, t_b) =
-  let ps_ab = mk_ie_app (quote bind) [t_a; mk_const_function t_a t_b] [ps_a; mk_const_function t_a ps_b] in
-  let t_ab = mk_e_app (quote dtuple2) [t_a; mk_const_function t_a t_b] in
+  let ps_ab = mk_ie_app (`bind) [t_a; mk_const_function t_a t_b] [ps_a; mk_const_function t_a ps_b] in
+  let t_ab = mk_e_app (`dtuple2) [t_a; mk_const_function t_a t_b] in
   (ps_ab, t_ab)
 
-val mk_parser_pairs: list term -> Tac parser_term
+val mk_parser_pairs: list binder -> Tac parser_term
 let rec mk_parser_pairs l =
   match l with
   | [] -> mk_parser_unit ()
-  | [x] -> parser_from_type x
+  | [x] -> parser_from_binder x
   | h::t -> (
-    let pst_h = parser_from_type h in
+    let pst_h = parser_from_binder h in
     let pst_t = mk_parser_pairs t in
     mk_parser_pair pst_h pst_t
   )
@@ -154,7 +185,7 @@ let rec mk_construct_pairs l =
   | [] -> fail "mk_construct_pair: list too short (zero element)"
   | [h] -> pack (Tv_Var h)
   | h::t ->
-    mk_e_app (quote Mkdtuple2) [pack (Tv_Var h); mk_construct_pairs t]
+    mk_e_app (`Mkdtuple2) [pack (Tv_Var h); mk_construct_pairs t]
 
 val mk_record_isomorphism_g: typ -> name -> list typ -> Tac term
 let mk_record_isomorphism_g input_type constructor_name constructor_types =
@@ -200,7 +231,7 @@ let prove_record_isomorphism_from_record () =
 val mk_record_isomorphism: typ -> name -> list typ -> parser_term -> Tac parser_term
 let mk_record_isomorphism result_type constructor_name constructor_types (parser_term, parser_type) =
   let result_parser_term =
-    mk_ie_app (quote isomorphism_explicit) [parser_type] [
+    mk_ie_app (`isomorphism_explicit) [parser_type] [
       result_type;
       parser_term;
       mk_record_isomorphism_f parser_type constructor_name constructor_types;
@@ -216,26 +247,16 @@ let mk_record_isomorphism result_type constructor_name constructor_types (parser
 // Annotation
 let with_tag (#a:Type0) (x:a) = ()
 
-val get_tag_from_annot: name -> list term -> option (typ & term)
-let rec get_tag_from_annot ctor_name l =
-  match l with
-  | [] -> None
-  | h::t -> (
-    let (head, args) = collect_app h in
-    if term_eq head (`with_tag) && List.Tot.length args = 2 then (
-      let [(tag_typ, _); (tag_val, _)] = args in
-      Some (tag_typ, tag_val)
-    ) else (
-      get_tag_from_annot ctor_name t
-    )
-  )
-
 val get_tag_from_ctor: ctor -> Tac (option (typ & term))
 let get_tag_from_ctor (ctor_name, ctor_typ) =
   match inspect ctor_typ with
-  | Tv_Arrow b _ ->
-    let _, (_, annotations) = inspect_binder b in
-    get_tag_from_annot ctor_name annotations
+  | Tv_Arrow b _ -> (
+    match find_annotation_in_binder b (`with_tag) with
+    | None -> None
+    | Some [tag_typ; tag_val] ->
+      Some (tag_typ, tag_val)
+    | Some _ -> fail "get_tag_from_ctor: malformed annotation"
+  )
   | _ -> fail "get_tag_from_ctor: not an arrow"
 
 val sanitize_tags: list (typ & term) -> Tac (typ & (list term))
@@ -295,8 +316,8 @@ let mk_middle_sum_type_parser (tag_parser, tag_typ) tag_vals ctors =
   let pair_parsers =
     Tactics.Util.map
       (fun (ctor_name, ctor_typ) ->
-        let types, _ = collect_arr ctor_typ in
-        mk_parser_pairs types
+        let binders, _ = collect_arr_bs ctor_typ in
+        mk_parser_pairs binders
       )
       ctors
   in
@@ -474,8 +495,9 @@ let gen_parser_fun type_fv =
     guard (term_eq typ (`Type0));
     match constructors with
     | [(c_name, c_typ)] -> (
-      let types, _ = collect_arr c_typ in
-      let pairs_parser = mk_parser_pairs types in
+      let binders, _ = collect_arr_bs c_typ in
+      let types = List.Tot.map type_of_binder binders in
+      let pairs_parser = mk_parser_pairs binders in
       let result_parsed_type = mk_e_app type_fv (Tactics.Util.map binder_to_term params) in
       (params, mk_record_isomorphism result_parsed_type c_name types pairs_parser)
     )
@@ -484,6 +506,7 @@ let gen_parser_fun type_fv =
       (params, mk_sum_type_parser ctors result_parsed_type)
     )
   )
+  | Sg_Inductive _ _ _ _ _ -> fail "gen_parser_fun: higher order types are not supported"
   | _ -> fail "gen_parser_fun: only inductives are supported"
 
 val gen_parser: term -> Tac decls
@@ -497,7 +520,7 @@ let gen_parser type_fv =
   let (params, (parser_fun_body, parsed_type)) = gen_parser_fun type_fv in
   let parser_fun = mk_abs params parser_fun_body in
   //dump (term_to_string parser_fun);
-  let unparametrized_parser_type = mk_e_app (quote parser_serializer) [parsed_type] in
+  let unparametrized_parser_type = mk_e_app (`parser_serializer) [parsed_type] in
   let parser_type =
     match params with
     | [] -> unparametrized_parser_type
@@ -576,4 +599,19 @@ noeq type test_type5 (n:nat) = {
 
 #push-options "--fuel 0 --ifuel 0"
 %splice [ps_test_type5] (gen_parser (`test_type5))
+#pop-options
+
+assume val ps_option: #a:Type -> parser_serializer a -> parser_serializer (option a)
+
+noeq type test_type6 (n:nat) = {
+  [@@@ with_parser (ps_option ps_char)]
+  a: option char;
+  [@@@ with_parser (ps_option (ps_blbytes 256))]
+  b: option (blbytes 256);
+  [@@@ with_parser (ps_option (ps_blbytes n))]
+  c: option (blbytes n);
+}
+
+#push-options "--fuel 0 --ifuel 0"
+%splice [ps_test_type6] (gen_parser (`test_type6))
 #pop-options
