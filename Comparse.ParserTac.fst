@@ -1,7 +1,7 @@
-module MLS.ParserTac
+module Comparse.ParserTac
 
-open MLS.Bytes
-open MLS.Parser
+open Comparse.Bytes
+open Comparse.Parser
 
 open FStar.Tactics
 
@@ -86,8 +86,8 @@ let parser_term_from_type_fv type_fv =
   let (type_module, type_name) = List.Tot.unsnoc (inspect_fv type_fv) in
   let parser_name = "ps_" ^ type_name in
   let parser_fullname =
-    if      (implode_qn (inspect_fv type_fv) = "Prims.unit") then explode_qn "MLS.Parser.ps_unit"
-    else if (implode_qn (inspect_fv type_fv) = "MLS.Bytes.nat_lbytes") then explode_qn "MLS.Parser.ps_nat_lbytes"
+    if      (implode_qn (inspect_fv type_fv) = "Prims.unit") then explode_qn "Comparse.Parser.ps_unit"
+    else if (implode_qn (inspect_fv type_fv) = "Comparse.Bytes.nat_lbytes") then explode_qn "Comparse.Parser.ps_nat_lbytes"
     else (List.Tot.snoc (type_module, parser_name))
   in
   pack (Tv_FVar (pack_fv parser_fullname))

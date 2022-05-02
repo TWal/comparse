@@ -1,6 +1,6 @@
-module MLS.Parser
+module Comparse.Parser
 
-open MLS.Bytes
+open Comparse.Bytes
 
 (*** Basic definitions ***)
 

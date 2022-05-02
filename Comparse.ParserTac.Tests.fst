@@ -1,8 +1,8 @@
-module MLS.ParserTac.Tests
+module Comparse.ParserTac.Tests
 
-open MLS.Bytes
-open MLS.Parser
-open MLS.ParserTac
+open Comparse.Bytes
+open Comparse.Parser
+open Comparse.ParserTac
 
 (*** Features test ***)
 

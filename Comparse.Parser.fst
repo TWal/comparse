@@ -1,7 +1,7 @@
-module MLS.Parser
+module Comparse.Parser
 
 open FStar.List.Tot
-open MLS.Bytes
+open Comparse.Bytes
 
 #set-options "--fuel 0 --ifuel 2"
 
