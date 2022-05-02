@@ -74,7 +74,7 @@ let rec add_prefixes_pre #bytes #bl pre l suffix =
 
 (*** Parser combinators ***)
 
-let bind #a #b #bytes ps_a ps_b =
+let bind #bytes #bl #a #b ps_a ps_b =
   let parse_ab (buf:bytes): option (dtuple2 a b & bytes) =
     match ps_a.parse buf with
     | None -> None
@@ -144,7 +144,7 @@ let bind #a #b #bytes ps_a ps_b =
     );
   })
 
-let bind_is_not_unit #a #b #bytes ps_a ps_b =
+let bind_is_not_unit #bytes #bl #a #b ps_a ps_b =
   introduce forall b. length b == 0 ==> (bind ps_a ps_b).parse b == None with (
     match ps_a.parse b with
     | None -> ()
@@ -153,9 +153,9 @@ let bind_is_not_unit #a #b #bytes ps_a ps_b =
       add_prefixes_length (ps_a.serialize xa) b_suffix
   )
 
-let bind_is_valid #a #b #bytes #bl ps_a ps_b pre xa xb = ()
+let bind_is_valid #bytes #bl #a #b ps_a ps_b pre xa xb = ()
 
-let isomorphism #a #bytes #bl #b ps_a iso =
+let isomorphism #bytes #bl #a #b ps_a iso =
   let parse_b buf =
     match ps_a.parse buf with
     | Some (xa, l) -> Some (iso.a_to_b xa, l)
@@ -194,11 +194,11 @@ let isomorphism #a #bytes #bl #b ps_a iso =
   } in
   res
 
-let isomorphism_is_not_unit #a #bytes #bl #b ps_a iso = ()
+let isomorphism_is_not_unit #bytes #bl #a #b ps_a iso = ()
 
-let isomorphism_is_valid #a #bytes #bl #b ps_a iso pre xb = ()
+let isomorphism_is_valid #bytes #bl #a #b ps_a iso pre xb = ()
 
-let refine #a #bytes #bl ps_a pred =
+let refine #bytes #bl #a ps_a pred =
   {
     parse = (fun buf ->
       match ps_a.parse buf with
@@ -215,9 +215,9 @@ let refine #a #bytes #bl ps_a pred =
     serialize_pre = (fun pre xb -> ps_a.serialize_pre pre xb);
   }
 
-let refine_is_not_unit #a #bytes #bl ps_a pred = ()
+let refine_is_not_unit #bytes #bl #a ps_a pred = ()
 
-let refine_is_valid #a #bytes #bl ps_a pred pre x = ()
+let refine_is_valid #bytes #bl #a ps_a pred pre x = ()
 
 (*** Parser for basic types ***)
 
@@ -275,8 +275,8 @@ let ps_lbytes_is_not_unit #bytes #bl n = ()
 
 let ps_lbytes_is_valid #bytes #bl n pre x = ()
 
-let ps_uint #bytes #bl sz =
-  let parse_uint (buf:bytes): option (nat_lbytes sz & bytes) =
+let ps_nat_lbytes #bytes #bl sz =
+  let parse_nat_lbytes (buf:bytes): option (nat_lbytes sz & bytes) =
     match (ps_lbytes sz).parse buf with
     | Some (x, suffix) -> (
       match to_nat sz (x <: bytes) with
@@ -285,12 +285,12 @@ let ps_uint #bytes #bl sz =
     )
     | None -> None
   in
-  let serialize_uint (n:nat_lbytes sz): list bytes =
+  let serialize_nat_lbytes (n:nat_lbytes sz): list bytes =
     (ps_lbytes sz).serialize (from_nat sz n <: bytes)
   in
   {
-    parse = parse_uint;
-    serialize = serialize_uint;
+    parse = parse_nat_lbytes;
+    serialize = serialize_nat_lbytes;
     parse_serialize_inv = (fun n suffix ->
       from_to_nat #bytes sz n;
       (ps_lbytes sz).parse_serialize_inv (from_nat sz n <: bytes) suffix
@@ -303,10 +303,10 @@ let ps_uint #bytes #bl sz =
     );
     is_valid = (fun pre _ -> True);
     parse_pre = (fun pre buf -> ());
-    serialize_pre = (fun pre n -> assert_norm (for_allP pre (serialize_uint n) <==> pre (from_nat sz n <: bytes)));
+    serialize_pre = (fun pre n -> assert_norm (for_allP pre (serialize_nat_lbytes n) <==> pre (from_nat sz n <: bytes)));
   }
 
-let ps_uint_is_valid #bytes #bl sz pre x = ()
+let ps_nat_lbytes_is_valid #bytes #bl sz pre x = ()
 
 (*** Exact parsers ***)
 
@@ -598,7 +598,7 @@ let ps_nat_in_range #bytes #bl r =
     else 8
   in
   assert_norm (r.max < pow2 64);
-  mk_isomorphism (refined nat (in_range r)) (refine (ps_uint sz) (in_range r)) (fun n -> n) (fun n -> n)
+  mk_isomorphism (refined nat (in_range r)) (refine (ps_nat_lbytes sz) (in_range r)) (fun n -> n) (fun n -> n)
 
 val _parse_nat: #bytes:Type0 -> {| bytes_like bytes |} -> b:bytes -> Tot (option (nat & bytes)) (decreases length b)
 let rec _parse_nat #bytes #bl b =
@@ -750,8 +750,8 @@ let ps_nat_accelerate #bytes #bl ps_nat_slow =
   );
   mk_isomorphism nat
     (
-      bind #nat #(fun nbytes -> refined (nat_lbytes (nbytes+1)) (nbytes_to_pred nbytes)) ps_nat_slow (fun nbytes ->
-        refine (ps_uint (nbytes+1)) (nbytes_to_pred nbytes)
+      bind #_ #_ #nat #(fun nbytes -> refined (nat_lbytes (nbytes+1)) (nbytes_to_pred nbytes)) ps_nat_slow (fun nbytes ->
+        refine (ps_nat_lbytes (nbytes+1)) (nbytes_to_pred nbytes)
       )
     )
     (fun (|nbytes, n|) -> n)

@@ -1,28 +1,9 @@
 module MLS.ParserTac
 
+open MLS.Bytes
+open MLS.Parser
+
 open FStar.Tactics
-
-assume new type parser_serializer (a:Type)
-assume val bind: #a:Type -> #b:(a -> Type) -> parser_serializer a -> (x:a -> parser_serializer (b x)) -> parser_serializer (x:a & b x)
-
-assume new type char
-assume val ps_char: parser_serializer char
-assume val ps_unit: parser_serializer unit
-
-type nat_lbytes (sz:nat) = n:nat{n < normalize_term (pow2 (8 `op_Multiply` sz))}
-assume val ps_nat_lbytes: sz:nat -> parser_serializer (nat_lbytes sz)
-
-assume val isomorphism_explicit:
-  #a:Type -> b:Type ->
-  ps_a:parser_serializer a -> f:(a -> b) -> g:(b -> a) ->
-  g_f_inv:(xa:a -> squash (g (f xa) == xa)) -> f_g_inv:(xb:b -> squash (f (g xb) == xb)) ->
-  parser_serializer b
-
-type refined (a:Type) (pred:a -> bool) = x:a{pred x}
-
-assume val refine:
-  #a:Type ->
-  parser_serializer a -> pred:(a -> bool) -> parser_serializer (refined a pred)
 
 // `l_to_r` is so slow!
 val my_l_to_r: list term -> Tac unit
@@ -82,13 +63,7 @@ let find_annotation_in_binder b expected_hd =
 (*** Utility functions ***)
 
 type parser_term = term & typ
-
-val parser_name_from_type_name: name -> Tac name
-let rec parser_name_from_type_name l =
-  match l with
-  | [] -> fail "parser_name_from_type_name: empty name?"
-  | [x] -> ["ps_" ^ x]
-  | h::t -> h::(parser_name_from_type_name t)
+type bytes_impl = term & term
 
 val mk_ie_app: term -> list term -> list term -> Tac term
 let mk_ie_app t implicits explicits =
@@ -96,30 +71,104 @@ let mk_ie_app t implicits explicits =
   let e t = (t, Q_Explicit) in
   mk_app (mk_app t (List.Tot.map i implicits)) (List.Tot.map e explicits)
 
-val parser_from_type: term -> Tac parser_term
-let parser_from_type t =
+val apply_implicit_bytes_impl: term -> bytes_impl -> Tac term
+let apply_implicit_bytes_impl t (bytes_term, bytes_like_term) =
+  mk_ie_app t [bytes_term; bytes_like_term] []
+
+val last: #a:Type0 -> list a -> Tac a
+let last l =
+  guard (Cons? l);
+  List.Tot.last l
+
+val parser_term_from_type_fv: fv -> Tac term
+let parser_term_from_type_fv type_fv =
+  guard (Cons? (inspect_fv type_fv));
+  let (type_module, type_name) = List.Tot.unsnoc (inspect_fv type_fv) in
+  let parser_name = "ps_" ^ type_name in
+  let parser_fullname =
+    if      (implode_qn (inspect_fv type_fv) = "Prims.unit") then explode_qn "MLS.Parser.ps_unit"
+    else if (implode_qn (inspect_fv type_fv) = "MLS.Bytes.nat_lbytes") then explode_qn "MLS.Parser.ps_nat_lbytes"
+    else (List.Tot.snoc (type_module, parser_name))
+  in
+  pack (Tv_FVar (pack_fv parser_fullname))
+
+// `tc (top_env ()) t` doesn't work with bound variables
+// and with splice there is no goal, so no `cur_env ()`
+val hacky_get_type: term -> Tac typ
+let hacky_get_type t =
+  match t with
+  | Tv_FVar fv -> tc (top_env ()) t
+  | Tv_Var bv -> type_of_bv bv
+  | _ -> fail "hacky_get_type: term is not a bv or a fv"
+
+val extract_bytes_impl: list term -> Tac (option bytes_impl)
+let extract_bytes_impl ts =
+  match ts with
+  | b::bl::_ -> (
+    let b_type = hacky_get_type b in
+    let bl_type = hacky_get_type bl in
+    let b_ok = (b_type `term_eq` (`Type0)) in
+    let bl_ok = (bl_type `term_eq` (mk_e_app (`bytes_like) [b])) in
+    if b_ok && bl_ok then (
+      Some (b, bl)
+    ) else (
+      None
+    )
+  )
+  | _ -> None
+
+val smart_mk_app_aux: term -> list term -> list binder -> Tac term
+let rec smart_mk_app_aux t args binders_to_copy =
+  match args, binders_to_copy with
+  | [], [] -> t
+  | a_hd::a_tl, b_hd::b_tl -> (
+    let (_, (q, _)) = inspect_binder b_hd in
+    let real_q = (
+      match q with
+      | Q_Meta _ -> Q_Implicit
+      | _ -> q
+    )
+    in
+    smart_mk_app_aux (pack (Tv_App t (a_hd, real_q))) a_tl b_tl
+  )
+  | _, _ -> fail ""
+
+val smart_mk_app: term -> list term -> Tac term
+let smart_mk_app t args =
+  let t_signature = tc (top_env ()) t in
+  let t_signature_binders, _ = collect_arr_bs t_signature in
+  smart_mk_app_aux t args t_signature_binders
+
+val parser_from_type: bytes_impl -> term -> Tac parser_term
+let parser_from_type (bytes_term, bytes_like_term) t =
   let type_unapplied, type_args = collect_app t in
   match inspect type_unapplied with
   | Tv_FVar fv ->
-    let parser_type_unapplied = pack (Tv_FVar (pack_fv (parser_name_from_type_name (inspect_fv fv)))) in
-    (mk_app parser_type_unapplied type_args, t)
+    let parser_unapplied = parser_term_from_type_fv fv in
+    let parser_signature = tc (top_env ()) parser_unapplied in
+    let expanded_type_args =
+      match extract_bytes_impl (List.Tot.map fst type_args) with
+      | Some _ -> type_args
+      | None -> (bytes_term, Q_Implicit)::(bytes_like_term, Q_Implicit)::type_args
+    in
+    (smart_mk_app parser_unapplied (List.Tot.map fst expanded_type_args), t)
   | _ -> fail "parser_from_type: head given by `collect_app` is not a fv?"
 
-let with_parser (#a:Type0) (x:parser_serializer a) = ()
+irreducible let with_parser (#bytes:Type0) {|bytes_like bytes|} (#a:Type0) (x:parser_serializer bytes a) = ()
 
-val parser_from_binder: binder -> Tac parser_term
-let parser_from_binder b =
+val parser_from_binder: bytes_impl -> binder -> Tac parser_term
+let parser_from_binder bi b =
   match find_annotation_in_binder b (`with_parser) with
   | None ->
-    parser_from_type (type_of_binder b)
-  | Some [typ; ps_typ] ->
+    parser_from_type bi (type_of_binder b)
+  | Some [bytes_term; bytes_like_term; typ; ps_typ] ->
     guard (term_eq typ (type_of_binder b));
     (ps_typ, typ)
   | Some _ -> fail "parser_from_binder: malformed annotation"
 
-val mk_parser_unit: unit -> parser_term
-let mk_parser_unit () =
-  (`ps_unit, `unit)
+val mk_parser_unit: bytes_impl -> Tac parser_term
+let mk_parser_unit (bytes_term, bytes_like_term) =
+  (mk_ie_app (`ps_unit) [bytes_term; bytes_like_term] [], `unit)
 
 val mk_const_function: typ -> term -> Tac term
 let mk_const_function ty t =
@@ -127,21 +176,21 @@ let mk_const_function ty t =
 
 (*** Parser for nested pairs ***)
 
-val mk_parser_pair: parser_term -> parser_term -> Tac parser_term
-let mk_parser_pair (ps_a, t_a) (ps_b, t_b) =
-  let ps_ab = mk_ie_app (`bind) [t_a; mk_const_function t_a t_b] [ps_a; mk_const_function t_a ps_b] in
+val mk_parser_pair: bytes_impl -> parser_term -> parser_term -> Tac parser_term
+let mk_parser_pair bi (ps_a, t_a) (ps_b, t_b) =
+  let ps_ab = mk_ie_app (apply_implicit_bytes_impl (`bind) bi) [t_a; mk_const_function t_a t_b] [ps_a; mk_const_function t_a ps_b] in
   let t_ab = mk_e_app (`dtuple2) [t_a; mk_const_function t_a t_b] in
   (ps_ab, t_ab)
 
-val mk_parser_pairs: list binder -> Tac parser_term
-let rec mk_parser_pairs l =
+val mk_parser_pairs: bytes_impl -> list binder -> Tac parser_term
+let rec mk_parser_pairs bi l =
   match l with
-  | [] -> mk_parser_unit ()
-  | [x] -> parser_from_binder x
+  | [] -> mk_parser_unit bi
+  | [x] -> parser_from_binder bi x
   | h::t -> (
-    let pst_h = parser_from_binder h in
-    let pst_t = mk_parser_pairs t in
-    mk_parser_pair pst_h pst_t
+    let pst_h = parser_from_binder bi h in
+    let pst_t = mk_parser_pairs bi t in
+    mk_parser_pair bi pst_h pst_t
   )
 
 (*** Parser for records ***)
@@ -153,7 +202,7 @@ let mkdtuple2_fv () =
 val mk_destruct_pairs: list typ -> Tac (pattern & list bv)
 let rec mk_destruct_pairs l =
   match l with
-  | [] -> fail "mk_destruct_pair: list too short (zero element)"
+  | [] -> (Pat_Constant C_Unit, [])
   | [h] -> (
     let bv_h = fresh_bv h in
     (Pat_Var bv_h, [bv_h])
@@ -182,7 +231,7 @@ let mk_record_isomorphism_f result_type constructor_name constructor_types =
 val mk_construct_pairs: list bv -> Tac term
 let rec mk_construct_pairs l =
   match l with
-  | [] -> fail "mk_construct_pair: list too short (zero element)"
+  | [] -> (`())
   | [h] -> pack (Tv_Var h)
   | h::t ->
     mk_e_app (`Mkdtuple2) [pack (Tv_Var h); mk_construct_pairs t]
@@ -202,9 +251,16 @@ val arrow_to_forall: #a:Type -> p:(a -> Type0) -> squash (forall (x:a). p x) -> 
 let arrow_to_forall #a p _ x =
   ()
 
+val wrap_isomorphism_proof: (unit -> Tac unit) -> unit -> Tac unit
+let wrap_isomorphism_proof tau () =
+  apply (`arrow_to_forall);
+  if lax_on() then
+    smt ()
+  else
+    tau ()
+
 val prove_record_isomorphism_from_pair: unit -> Tac unit
 let prove_record_isomorphism_from_pair () =
-  apply (`arrow_to_forall);
   let _ = repeat (fun () ->
     apply_lemma (`dtuple2_ind);
     let _ = forall_intro () in
@@ -213,14 +269,8 @@ let prove_record_isomorphism_from_pair () =
   let _ = forall_intro () in
   trefl()
 
-val last: #a:Type0 -> list a -> Tac a
-let last l =
-  guard (Cons? l);
-  List.Tot.last l
-
 val prove_record_isomorphism_from_record: unit -> Tac unit
 let prove_record_isomorphism_from_record () =
-  apply (`arrow_to_forall);
   let b = forall_intro () in
   destruct (binder_to_term b);
   let binders = intros () in
@@ -228,24 +278,43 @@ let prove_record_isomorphism_from_record () =
   my_l_to_r [binder_to_term breq];
   trefl ()
 
-val mk_record_isomorphism: typ -> name -> list typ -> parser_term -> Tac parser_term
-let mk_record_isomorphism result_type constructor_name constructor_types (parser_term, parser_type) =
-  let result_parser_term =
-    mk_ie_app (`isomorphism_explicit) [parser_type] [
-      result_type;
-      parser_term;
+val mk_record_isomorphism: bytes_impl -> typ -> name -> list typ -> parser_term -> Tac parser_term
+let mk_record_isomorphism bi result_type constructor_name constructor_types (parser_term, parser_type) =
+  let the_isomorphism =
+    mk_ie_app (`Mkisomorphism_between) [
+      parser_type;
+      result_type
+    ] [
       mk_record_isomorphism_f parser_type constructor_name constructor_types;
       mk_record_isomorphism_g result_type constructor_name constructor_types;
-      (`(synth_by_tactic (prove_record_isomorphism_from_pair)));
-      (`(synth_by_tactic (prove_record_isomorphism_from_record)));
+      (`(synth_by_tactic (wrap_isomorphism_proof prove_record_isomorphism_from_pair)));
+      (`(synth_by_tactic (wrap_isomorphism_proof prove_record_isomorphism_from_record)));
+    ]
+  in
+  let result_parser_term =
+    mk_ie_app (apply_implicit_bytes_impl (`isomorphism) bi) [
+      parser_type;
+      result_type
+    ] [
+      parser_term;
+      the_isomorphism
     ]
   in
   (result_parser_term, result_type)
 
+val mk_record_parser: bytes_impl -> ctor -> typ -> Tac parser_term
+let mk_record_parser bi (c_name, c_typ) result_parsed_type =
+  let binders, _ = collect_arr_bs c_typ in
+  let types = List.Tot.map type_of_binder binders in
+  let pairs_parser = mk_parser_pairs bi binders in
+  mk_record_isomorphism bi result_parsed_type c_name types pairs_parser
+
 (*** Parser for sum type ***)
 
 // Annotation
-let with_tag (#a:Type0) (x:a) = ()
+irreducible let with_tag (#a:Type0) (x:a) = ()
+// /!\ Don't work as expected, see https://github.com/FStarLang/FStar/issues/2571
+// unfold let with_num_tag (n:nat) (x:nat_lbytes n) = with_tag #(nat_lbytes n) x
 
 val get_tag_from_ctor: ctor -> Tac (option (typ & term))
 let get_tag_from_ctor (ctor_name, ctor_typ) =
@@ -257,7 +326,7 @@ let get_tag_from_ctor (ctor_name, ctor_typ) =
       Some (tag_typ, tag_val)
     | Some _ -> fail "get_tag_from_ctor: malformed annotation"
   )
-  | _ -> fail "get_tag_from_ctor: not an arrow"
+  | _ -> None
 
 val sanitize_tags: list (typ & term) -> Tac (typ & (list term))
 let sanitize_tags tags =
@@ -289,8 +358,8 @@ let get_tag_from_ctors ctors =
     fail "Inconsistent tag annotation"
   )
 
-val mk_tag_parser: typ -> list term -> Tac parser_term
-let mk_tag_parser tag_typ tag_vals =
+val mk_tag_parser: bytes_impl -> typ -> list term -> Tac parser_term
+let mk_tag_parser bi tag_typ tag_vals =
   let pred =
     let tag_bv = fresh_bv tag_typ in
     let tag_term = pack (Tv_Var tag_bv) in
@@ -300,9 +369,8 @@ let mk_tag_parser tag_typ tag_vals =
     let disj = fold_right mk_disj tag_vals_tail (`((`#tag_term) = (`#tag_vals_head))) in
     pack (Tv_Abs (mk_binder tag_bv) disj)
   in
-  let (tag_parser, tag_typ) = parser_from_type tag_typ in
-  (mk_ie_app (`refine) [tag_typ] [tag_parser; pred], mk_e_app (`refined) [tag_typ; pred])
-
+  let (tag_parser, tag_typ) = parser_from_type bi tag_typ in
+  (mk_ie_app (apply_implicit_bytes_impl (`refine) bi) [tag_typ] [tag_parser; pred], mk_e_app (`refined) [tag_typ; pred])
 
 val term_to_pattern: term -> Tac pattern
 let term_to_pattern t =
@@ -311,13 +379,13 @@ let term_to_pattern t =
   | Tv_Const c -> Pat_Constant c
   | _ -> fail "term_to_pattern: term type not handled (not fv or const)"
 
-val mk_middle_sum_type_parser: parser_term -> list term -> list ctor -> Tac (parser_term & term)
-let mk_middle_sum_type_parser (tag_parser, tag_typ) tag_vals ctors =
+val mk_middle_sum_type_parser: bytes_impl -> parser_term -> list term -> list ctor -> Tac (parser_term & term)
+let mk_middle_sum_type_parser bi (tag_parser, tag_typ) tag_vals ctors =
   let pair_parsers =
     Tactics.Util.map
       (fun (ctor_name, ctor_typ) ->
         let binders, _ = collect_arr_bs ctor_typ in
-        mk_parser_pairs binders
+        mk_parser_pairs bi binders
       )
       ctors
   in
@@ -341,7 +409,7 @@ let mk_middle_sum_type_parser (tag_parser, tag_typ) tag_vals ctors =
       pack (Tv_Abs (mk_binder tag_bv) (pack (Tv_Match tag_term None branches_term)))
     )
   in
-  let middle_parser = mk_ie_app (`bind) [tag_typ; tag_to_pair_type_term] [tag_parser; tag_to_pair_parser_term] in
+  let middle_parser = mk_ie_app (apply_implicit_bytes_impl (`bind) bi) [tag_typ; tag_to_pair_type_term] [tag_parser; tag_to_pair_parser_term] in
   let middle_typ = mk_e_app (`dtuple2) [tag_typ; tag_to_pair_type_term] in
   ((middle_parser, middle_typ), tag_to_pair_type_term)
 
@@ -351,7 +419,6 @@ let mk_middle_to_sum_fun tag_typ tag_to_pair_typ tag_vals ctors =
   let branches =
     Tactics.Util.map
       (fun (tag_val, (ctor_name, ctor_typ)) ->
-        //dump ("A " ^ term_to_string ctor_typ);
         let types, _ = collect_arr ctor_typ in
         let (pair_pattern, bvs) = mk_destruct_pairs types in
         let rec_term = mk_construct_record ctor_name bvs in
@@ -361,7 +428,6 @@ let mk_middle_to_sum_fun tag_typ tag_to_pair_typ tag_vals ctors =
       )
       (List.Pure.zip tag_vals ctors)
   in
-  //dump ("B " ^ term_to_string (mk_e_app (`dtuple2) [tag_typ; tag_to_pair_typ]));
   let pair_bv = fresh_bv (mk_e_app (`dtuple2) [tag_typ; tag_to_pair_typ]) in
   pack (Tv_Abs (mk_binder pair_bv) (pack (Tv_Match (pack (Tv_Var pair_bv)) None branches)))
 
@@ -380,7 +446,6 @@ let mk_sum_to_middle_fun sum_typ tag_vals ctors =
       )
       (List.Pure.zip tag_vals ctors)
   in
-  //dump ("C " ^ term_to_string sum_typ);
   let sum_bv = fresh_bv sum_typ in
   pack (Tv_Abs (mk_binder sum_bv) (pack (Tv_Match (pack (Tv_Var sum_bv)) None branches)))
 
@@ -404,9 +469,11 @@ let add_squash p q _ =
 val remove_refine: a:Type0 -> p:(a -> Type0) -> q:(a -> Type0) -> squash (forall (x:a). q x) -> squash (forall (x:a{p x}). q x)
 let remove_refine a p q _ = ()
 
+val forall_unit_intro: p:(unit -> Type0) -> squash (p ()) -> squash (forall (y:unit). p y)
+let forall_unit_intro p _ = ()
+
 val prove_pair_sum_pair_isomorphism: unit -> Tac unit
 let prove_pair_sum_pair_isomorphism () =
-  apply (`arrow_to_forall);
   apply_lemma (`dtuple2_ind);
   apply (`refined_ind);
   // TODO remove this horrible thing.
@@ -424,7 +491,10 @@ let prove_pair_sum_pair_isomorphism () =
       let _ = forall_intro () in
       ()
     ) in
-    let _ = forall_intro () in
+    (
+      try apply (`forall_unit_intro)
+      with _ -> let _ = forall_intro () in ()
+    );
     trefl()
   in
   let _ = repeat (fun () ->
@@ -436,7 +506,6 @@ let prove_pair_sum_pair_isomorphism () =
 val prove_sum_pair_sum_isomorphism: unit -> Tac unit
 let prove_sum_pair_sum_isomorphism () =
   compute();
-  apply (`arrow_to_forall);
   let x_term = binder_to_term (forall_intro ()) in
   destruct x_term;
   iterAll (fun () ->
@@ -447,38 +516,61 @@ let prove_sum_pair_sum_isomorphism () =
     trefl ()
   )
 
-val mk_sum_isomorphism: typ -> typ -> term -> list term -> list ctor -> parser_term -> Tac parser_term
-let mk_sum_isomorphism tag_typ result_typ tag_to_pair_typ tag_vals ctors (pairs_parser, pairs_typ) =
+val mk_sum_isomorphism: bytes_impl -> typ -> typ -> term -> list term -> list ctor -> parser_term -> Tac parser_term
+let mk_sum_isomorphism bi tag_typ result_typ tag_to_pair_typ tag_vals ctors (pairs_parser, pairs_typ) =
   let middle_to_sum_def = mk_middle_to_sum_fun tag_typ tag_to_pair_typ tag_vals ctors in
   let sum_to_middle_def = mk_sum_to_middle_fun result_typ tag_vals ctors in
   let middle_typ = mk_e_app (`dtuple2) [tag_typ; tag_to_pair_typ] in
   let mk_a_to_b (a:typ) (b:typ) = (pack (Tv_Arrow (fresh_binder a) (pack_comp (C_Total b [])))) in
   //We need to help F* with the type of things otherwise it is completely lost
   let ascribe_type (t:typ) (x:term) = mk_ie_app (`id) [t] [x] in
-  let result_parser = mk_ie_app (`isomorphism_explicit) [pairs_typ] [
-    result_typ;
-    pairs_parser;
+  let the_isomorphism = mk_ie_app (`Mkisomorphism_between) [
+    pairs_typ;
+    result_typ
+  ] [
     ascribe_type (mk_a_to_b middle_typ result_typ) middle_to_sum_def;
     ascribe_type (mk_a_to_b result_typ middle_typ) sum_to_middle_def;
-    (`(synth_by_tactic prove_pair_sum_pair_isomorphism));
-    (`(synth_by_tactic prove_sum_pair_sum_isomorphism))
+    (`(synth_by_tactic (wrap_isomorphism_proof prove_pair_sum_pair_isomorphism)));
+    (`(synth_by_tactic (wrap_isomorphism_proof prove_sum_pair_sum_isomorphism)))
+  ] in
+  let result_parser = mk_ie_app (apply_implicit_bytes_impl (`isomorphism) bi) [
+    pairs_typ;
+    result_typ
+  ] [
+    pairs_parser;
+    the_isomorphism
   ] in
   (result_parser, result_typ)
 
-val mk_sum_type_parser: list ctor -> typ -> Tac parser_term
-let mk_sum_type_parser ctors result_type =
+val mk_sum_type_parser: bytes_impl -> list ctor -> typ -> Tac parser_term
+let mk_sum_type_parser bi ctors result_type =
   let (tag_typ, tag_vals) = get_tag_from_ctors ctors in
-  let tag_parser_term = mk_tag_parser tag_typ tag_vals in
+  let tag_parser_term = mk_tag_parser bi tag_typ tag_vals in
   let (tag_parser, tag_typ) = tag_parser_term in
-  let (middle_sum_type_parser_term, tag_to_pair_typ) = mk_middle_sum_type_parser tag_parser_term tag_vals ctors in
-  mk_sum_isomorphism tag_typ result_type tag_to_pair_typ tag_vals ctors middle_sum_type_parser_term
+  let (middle_sum_type_parser_term, tag_to_pair_typ) = mk_middle_sum_type_parser bi tag_parser_term tag_vals ctors in
+  mk_sum_isomorphism bi tag_typ result_type tag_to_pair_typ tag_vals ctors middle_sum_type_parser_term
 
 (*** Parser generator ***)
 
-val gen_parser_fun: term -> Tac (list binder & parser_term)
+val apply_binder: term -> binder -> Tac term
+let apply_binder t b =
+  let (_, (q, _)) = inspect_binder b in
+  let real_q =
+    match q with
+    | Q_Meta _ -> Q_Implicit
+    | x -> x
+  in
+  pack (Tv_App t (binder_to_term b, real_q))
+
+val apply_binders: term -> list binder -> Tac term
+let rec apply_binders t bs =
+  match bs with
+  | [] -> t
+  | bs_head::bs_tail -> apply_binders (apply_binder t bs_head) bs_tail
+
+val gen_parser_fun: term -> Tac (typ & term)
 let gen_parser_fun type_fv =
   let env = top_env () in
-
   let type_name =
     match inspect type_fv with
     | Tv_FVar fv -> (inspect_fv fv)
@@ -489,22 +581,45 @@ let gen_parser_fun type_fv =
   | Some x -> x
   | None -> fail "Type not found?"
   in
-
   match inspect_sigelt type_declaration with
   | Sg_Inductive name [] params typ constructors -> (
     guard (term_eq typ (`Type0));
-    match constructors with
-    | [(c_name, c_typ)] -> (
-      let binders, _ = collect_arr_bs c_typ in
-      let types = List.Tot.map type_of_binder binders in
-      let pairs_parser = mk_parser_pairs binders in
-      let result_parsed_type = mk_e_app type_fv (Tactics.Util.map binder_to_term params) in
-      (params, mk_record_isomorphism result_parsed_type c_name types pairs_parser)
-    )
-    | ctors -> (
-      let result_parsed_type = mk_e_app type_fv (Tactics.Util.map binder_to_term params) in
-      (params, mk_sum_type_parser ctors result_parsed_type)
-    )
+    let mk_bi_binders (): Tac (binder & binder) =
+      let b = pack_binder (fresh_bv_named "bytes" (`Type0)) Q_Implicit [] in
+      let bl = pack_binder (fresh_bv_named "bl" (`(bytes_like (`#(binder_to_term b))))) (Q_Meta (`FStar.Tactics.Typeclasses.tcresolve)) [] in
+      (b, bl)
+    in
+    let ((bytes_binder, bytes_like_binder), tail_params) =
+      match params with
+      | b::bl::tail_params -> (
+        let b_ok = ((type_of_binder b) `term_eq` (`Type0)) in
+        let bl_ok = ((type_of_binder bl) `term_eq` (mk_e_app (`bytes_like) [binder_to_term b])) in
+        let (b_bv, (_, b_annots)) = inspect_binder b in
+        let b_implicit = pack_binder b_bv Q_Implicit b_annots in
+        if b_ok && bl_ok then (
+          ((b_implicit, bl), tail_params)
+        ) else (
+          (mk_bi_binders (), params)
+        )
+      )
+      | _ -> (mk_bi_binders (), params)
+    in
+    let bi = (binder_to_term bytes_binder, binder_to_term bytes_like_binder) in
+    let parser_params = bytes_binder::bytes_like_binder::tail_params in
+    let result_parsed_type = apply_binders type_fv params in
+    let (parser_fun_body, _) =
+      match constructors with
+      | [ctor] -> (
+        mk_record_parser bi ctor result_parsed_type
+      )
+      | ctors -> (
+        mk_sum_type_parser bi ctors result_parsed_type
+      )
+    in
+    let parser_fun = mk_abs parser_params parser_fun_body in
+    let unparametrized_parser_type = mk_app (`parser_serializer) [(binder_to_term bytes_binder), Q_Explicit; (binder_to_term bytes_like_binder), Q_Implicit; result_parsed_type, Q_Explicit] in
+    let parser_type = mk_arr parser_params (pack_comp (C_Total unparametrized_parser_type [])) in
+    (parser_type, parser_fun)
   )
   | Sg_Inductive _ _ _ _ _ -> fail "gen_parser_fun: higher order types are not supported"
   | _ -> fail "gen_parser_fun: only inductives are supported"
@@ -516,16 +631,10 @@ let gen_parser type_fv =
     | Tv_FVar fv -> inspect_fv fv
     | _ -> fail "type_fv is not a free variable"
   in
-  let parser_name = parser_name_from_type_name type_name in
-  let (params, (parser_fun_body, parsed_type)) = gen_parser_fun type_fv in
-  let parser_fun = mk_abs params parser_fun_body in
+  let parser_name = List.Tot.snoc (moduleof (top_env ()), "ps_" ^ (last type_name)) in
+  let (parser_type, parser_fun) = gen_parser_fun type_fv in
   //dump (term_to_string parser_fun);
-  let unparametrized_parser_type = mk_e_app (`parser_serializer) [parsed_type] in
-  let parser_type =
-    match params with
-    | [] -> unparametrized_parser_type
-    | _::_ -> mk_arr params (pack_comp (C_Total unparametrized_parser_type []))
-  in
+  //dump (term_to_string parser_type);
   let parser_letbinding = pack_lb ({
     lb_fv = pack_fv parser_name;
     lb_us = [];
@@ -535,83 +644,3 @@ let gen_parser type_fv =
   let sv : sigelt_view = Sg_Let false [parser_letbinding] in
   [pack_sigelt sv]
 
-(*** Tests ***)
-
-noeq type test_type2 = {
-  a:char;
-  b:char;
-  c:char;
-  d:char;
-  e:char;
-  f:char;
-  g:char;
-  h:char;
-  i:char;
-  j:char;
-}
-
-#push-options "--fuel 0 --ifuel 0"
-%splice [ps_test_type2] (gen_parser (`test_type2))
-#pop-options
-
-assume val blbytes: nat -> Type0
-assume val ps_blbytes: n:nat -> parser_serializer (blbytes n)
-
-noeq type test_type3 =
-  | Test3_1: [@@@with_tag #(nat_lbytes 1) 1] char -> char -> char -> char -> char -> char -> char -> test_type3
-  | Test3_2: [@@@with_tag #(nat_lbytes 1) 2] char -> char -> char -> char -> test_type3
-  | Test3_3: [@@@with_tag #(nat_lbytes 1) 3] blbytes 256 -> test_type3
-  | Test3_4: [@@@with_tag #(nat_lbytes 1) 4] char -> test_type3
-  | Test3_5: [@@@with_tag #(nat_lbytes 1) 5] char -> test_type3
-
-#push-options "--fuel 0 --ifuel 1"
-%splice [ps_test_type3] (gen_parser (`test_type3))
-#pop-options
-
-noeq type test_type3_2 =
-  | Test32_1: char -> char -> char -> char -> char -> char -> char -> test_type3_2
-  | Test32_2: char -> char -> char -> char -> test_type3_2
-  | Test32_3: blbytes 256 -> test_type3_2
-  | Test32_4: char -> test_type3_2
-  | Test32_5: char -> test_type3_2
-
-#push-options "--fuel 0 --ifuel 1"
-%splice [ps_test_type3_2] (gen_parser (`test_type3_2))
-#pop-options
-
-noeq type test_type4 = {
-  a:blbytes 256;
-  b:blbytes 256;
-  c:blbytes 256;
-  d:blbytes 256;
-}
-
-#push-options "--fuel 0 --ifuel 0"
-%splice [ps_test_type4] (gen_parser (`test_type4))
-#pop-options
-
-noeq type test_type5 (n:nat) = {
-  a:blbytes n;
-  b:blbytes n;
-  c:blbytes n;
-  d:blbytes n;
-}
-
-#push-options "--fuel 0 --ifuel 0"
-%splice [ps_test_type5] (gen_parser (`test_type5))
-#pop-options
-
-assume val ps_option: #a:Type -> parser_serializer a -> parser_serializer (option a)
-
-noeq type test_type6 (n:nat) = {
-  [@@@ with_parser (ps_option ps_char)]
-  a: option char;
-  [@@@ with_parser (ps_option (ps_blbytes 256))]
-  b: option (blbytes 256);
-  [@@@ with_parser (ps_option (ps_blbytes n))]
-  c: option (blbytes n);
-}
-
-#push-options "--fuel 0 --ifuel 0"
-%splice [ps_test_type6] (gen_parser (`test_type6))
-#pop-options

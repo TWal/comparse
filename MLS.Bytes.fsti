@@ -2,7 +2,7 @@ module MLS.Bytes
 
 open FStar.Mul
 
-type nat_lbytes (sz:nat) = n:nat{n < pow2 (8*sz)}
+type nat_lbytes (sz:nat) = n:nat{n < normalize_term (pow2 (8*sz))}
 
 /// Minimal interface to manipulate symbolic bytes.
 /// Here are the explanations for a few design decisions:
