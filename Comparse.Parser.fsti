@@ -379,7 +379,7 @@ val ps_pre_length_seq_is_valid:
 
 type size_range = {
   min: nat;
-  max: max:nat{normalize_term min <= normalize_term max /\ normalize_term max < normalize_term (pow2 64)};
+  max: max:nat{normalize_term min <= normalize_term max};
 }
 
 let in_range (r:size_range) (x:nat) =

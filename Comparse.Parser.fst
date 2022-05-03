@@ -591,13 +591,7 @@ let ps_pre_length_seq #bytes #bl #a pre_length ps_length ps_a =
 let ps_pre_length_seq_is_valid #bytes #bl #a pre_length ps_length ps_a pre x = ()
 
 let ps_nat_in_range #bytes #bl r =
-  let sz =
-    if r.max < pow2 8 then 1
-    else if r.max < pow2 16 then 2
-    else if r.max < pow2 32 then 4
-    else 8
-  in
-  assert_norm (r.max < pow2 64);
+  let sz = find_nbytes r.max in
   mk_isomorphism (refined nat (in_range r)) (refine (ps_nat_lbytes sz) (in_range r)) (fun n -> n) (fun n -> n)
 
 val _parse_nat: #bytes:Type0 -> {| bytes_like bytes |} -> b:bytes -> Tot (option (nat & bytes)) (decreases length b)
@@ -708,33 +702,14 @@ let ps_nat_unary #bytes #bl =
 
 open FStar.Mul
 
-val find_nbytes_aux: n:pos -> acc:nat -> Pure nat (requires pow2 (8 * acc) <= n)
-  (ensures fun res -> pow2 (8 * res) <= n /\ n < pow2 (8 * (res+1)))
-  (decreases n - pow2 (8 * acc))
-let rec find_nbytes_aux n acc =
-  if n < pow2 (8* (acc+1)) then
-    acc
-  else (
-    Math.Lemmas.pow2_lt_compat (8 * (acc+1)) (8 * acc);
-    find_nbytes_aux n (acc+1)
-  )
-
-val find_nbytes: n:nat -> Pure nat (requires True)
-  (ensures fun res -> (n == 0 /\ res == 0) \/ (pow2 (8 * res) <= n /\ n < pow2 (8 * (res+1))))
-let find_nbytes n =
-  if n = 0 then 0
-  else (
-    assert_norm(pow2 (8*0) == 1);
-    find_nbytes_aux n 0
-  )
-
 // Use a "slow" nat parser to derive a more compact one
 val ps_nat_accelerate: #bytes:Type0 -> {|bytes_like bytes|} -> parser_serializer bytes nat -> parser_serializer bytes nat
 let ps_nat_accelerate #bytes #bl ps_nat_slow =
+  let nbytes_prefix (n:nat): Pure nat (requires True) (ensures fun res -> (n == 0 /\ res == 0) \/ (pow2 (8 * res) <= n /\ n < pow2 (8 * (res+1)))) = (find_nbytes n) - 1 in
   let nbytes_to_pred (nbytes:nat) (n:nat) = (nbytes = 0 && n = 0) || (pow2 (8 * nbytes)) <= n in
-  introduce forall (nbytes:nat) (n:nat_lbytes (nbytes+1)). pow2 (8 * nbytes) <= n ==> nbytes == find_nbytes n with (
+  introduce forall (nbytes:nat) (n:nat_lbytes (nbytes+1)). pow2 (8 * nbytes) <= n ==> nbytes == nbytes_prefix n with (
     if pow2 (8 * nbytes) <= n then (
-      let found_nbytes = find_nbytes n in
+      let found_nbytes = nbytes_prefix n in
       if nbytes < found_nbytes then (
         Math.Lemmas.pow2_le_compat (8 * found_nbytes) (8 * (nbytes+1));
         assert(False)
@@ -755,7 +730,7 @@ let ps_nat_accelerate #bytes #bl ps_nat_slow =
       )
     )
     (fun (|nbytes, n|) -> n)
-    (fun n -> (|find_nbytes n, n|))
+    (fun n -> (|nbytes_prefix n, n|))
 
 let ps_true_nat #bytes #bl =
   assert_norm(forall pre n. (ps_nat_unary #bytes).is_valid pre n); //???
