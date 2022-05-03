@@ -18,3 +18,4 @@ let find_nbytes n =
     find_nbytes_aux n 1
   )
 
+let nat_lbytes_helper (sz:nat) = ()

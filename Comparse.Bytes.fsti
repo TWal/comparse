@@ -1,12 +1,14 @@
 module Comparse.Bytes
 
 open FStar.Mul
-open FStar.UInt //Bring in scope the `pow2_values` lemma
 
 val find_nbytes: n:nat -> Pure pos (requires True)
   (ensures fun res -> (n == 0 /\ res == 1) \/ (pow2 (8 * (res-1)) <= n /\ n < pow2 (8 * res)))
 
-type nat_lbytes (sz:nat) = n:nat{n < pow2 (8*sz)}
+type nat_lbytes (sz:nat) = n:nat{n < normalize_term (pow2 (8*sz))}
+
+val nat_lbytes_helper: sz:nat -> Lemma (normalize_term (pow2 (8*sz)) == pow2 (8*sz))
+[SMTPat (nat_lbytes sz)]
 
 /// Minimal interface to manipulate symbolic bytes.
 /// Here are the explanations for a few design decisions:
