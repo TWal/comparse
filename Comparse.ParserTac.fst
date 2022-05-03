@@ -328,22 +328,18 @@ let get_tag_from_ctor (ctor_name, ctor_typ) =
   )
   | _ -> None
 
-val sanitize_tags: list (typ & term) -> Tac (typ & (list term))
-let sanitize_tags tags =
-  guard (Cons? tags);
-  let tag_typs, tag_vals = List.Tot.unzip tags in
-  let tag_typ =
-    guard (List.Tot.for_all (fun x -> term_eq x (Cons?.hd tag_typs)) tag_typs);
-    Cons?.hd tag_typs
-  in
-  (tag_typ, tag_vals)
-
 val get_tag_from_ctors: list ctor -> Tac (typ & (list term))
 let get_tag_from_ctors ctors =
   let opt_tags = Tactics.Util.map get_tag_from_ctor ctors in
   if List.Tot.for_all (Some?) opt_tags then (
     let tags = Tactics.Util.map (fun (opt_tag:option(typ & term)) -> guard (Some? opt_tag); Some?.v opt_tag) opt_tags in
-    sanitize_tags tags
+    guard (Cons? tags);
+    let tag_typs, tag_vals = List.Tot.unzip tags in
+    let tag_typ =
+      guard (List.Tot.for_all (fun x -> term_eq x (Cons?.hd tag_typs)) tag_typs);
+      Cons?.hd tag_typs
+    in
+    (tag_typ, tag_vals)
   ) else if List.Tot.for_all (None?) opt_tags then (
     let rec find_nbytes (n:nat): Tac nat =
       if List.Tot.length ctors < pow2 (8 `op_Multiply` n) then
