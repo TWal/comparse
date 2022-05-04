@@ -349,6 +349,28 @@ val pse_list_is_valid:
   Lemma ((pse_list ps_a).is_valid_exact pre l <==> for_allP (ps_a.is_valid pre) l)
   [SMTPat ((pse_list ps_a).is_valid_exact pre l)]
 
+val bind_exact: #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:(a -> Type) -> ps_a:parser_serializer_unit bytes a -> ps_b:(xa:a -> parser_serializer_exact bytes (b xa)) -> parser_serializer_exact bytes (dtuple2 a b)
+
+val bind_exact_is_valid_exact:
+  #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:(a -> Type) ->
+  ps_a:parser_serializer_unit bytes a -> ps_b:(xa:a -> parser_serializer_exact bytes (b xa)) ->
+  pre:bytes_compatible_pre bytes -> xa:a -> xb:(b xa) ->
+  Lemma ((bind_exact ps_a ps_b).is_valid_exact pre (|xa, xb|) <==> ps_a.is_valid pre xa /\ (ps_b xa).is_valid_exact pre xb)
+  [SMTPat ((bind_exact ps_a ps_b).is_valid_exact pre (|xa, xb|))]
+
+val isomorphism_exact:
+  #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:Type ->
+  ps_a:parser_serializer_exact bytes a -> iso:isomorphism_between a b ->
+  parser_serializer_exact bytes b
+
+val isomorphism_exact_is_valid:
+  #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:Type ->
+  ps_a:parser_serializer_exact bytes a -> iso:isomorphism_between a b ->
+  pre:bytes_compatible_pre bytes -> xb:b ->
+  Lemma
+  ((isomorphism_exact ps_a iso).is_valid_exact pre xb <==> ps_a.is_valid_exact pre (iso.b_to_a xb))
+  [SMTPat ((isomorphism_exact ps_a iso).is_valid_exact pre xb)]
+
 (*** Parser for variable-length bytes / lists ***)
 
 /// The parsers below work by serializing length first, then the variable-length data.

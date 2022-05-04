@@ -463,6 +463,101 @@ let pse_list_is_valid #bytes #bl #a ps_a pre l =
   assert_norm ((pse_list ps_a).is_valid_exact pre l == _is_valid_la ps_a pre l)
 #pop-options
 
+let bind_exact #bytes #bl #a #b ps_a ps_b =
+  let parse_exact (buf:bytes): option (dtuple2 a b) =
+    match ps_a.parse buf with
+    | None -> None
+    | Some (xa, suffix) -> (
+      match (ps_b xa).parse_exact suffix with
+      | None -> None
+      | Some xb -> Some (|xa, xb|)
+    )
+  in
+  let serialize_exact (x:dtuple2 a b): bytes =
+    let (|xa, xb|) = x in
+    add_prefixes (ps_a.serialize xa) ((ps_b xa).serialize_exact xb)
+  in
+  let is_valid_exact (pre:bytes_compatible_pre bytes) (x:dtuple2 a b) =
+    let (|xa, xb|) = x in
+    ps_a.is_valid pre xa /\ (ps_b xa).is_valid_exact pre xb
+  in
+  {
+    parse_exact = parse_exact;
+    serialize_exact = serialize_exact;
+    parse_serialize_inv_exact = (fun (|xa, xb|) ->
+      let la = ps_a.serialize xa in
+      let lb = (ps_b xa).serialize_exact xb in
+      ps_a.parse_serialize_inv xa lb;
+      (ps_b xa).parse_serialize_inv_exact xb
+    );
+    serialize_parse_inv_exact = (fun buf ->
+      match parse_exact buf with
+      | None -> ()
+      | Some (|xa, xb|) ->
+        let (xa, xb_suffix) = Some?.v (ps_a.parse buf) in
+        let xb = Some?.v ((ps_b xa).parse_exact xb_suffix) in
+        ps_a.serialize_parse_inv buf;
+        (ps_b xa).serialize_parse_inv_exact xb_suffix
+    );
+    is_valid_exact = is_valid_exact;
+    parse_pre_exact = (fun pre buf ->
+      match parse_exact buf with
+      | None -> ()
+      | Some (|xa, xb|) ->
+        let (xa, xb_suffix) = Some?.v (ps_a.parse buf) in
+        let xb = Some?.v ((ps_b xa).parse_exact xb_suffix) in
+        ps_a.parse_pre pre buf;
+        (ps_b xa).parse_pre_exact pre xb_suffix
+    );
+    serialize_pre_exact = (fun pre (|xa, xb|) ->
+      ps_a.serialize_pre pre xa;
+      (ps_b xa).serialize_pre_exact pre xb;
+      add_prefixes_pre pre (ps_a.serialize xa) ((ps_b xa).serialize_exact xb)
+    );
+  }
+
+let bind_exact_is_valid_exact #bytes #bl #a #b ps_a ps_b pre xa xb = ()
+
+let isomorphism_exact #bytes #bl #a #b ps_a iso =
+  let parse_b (buf:bytes): option b =
+    match ps_a.parse_exact buf with
+    | Some xa -> Some (iso.a_to_b xa)
+    | None -> None
+  in
+  let serialize_b (xb:b): bytes =
+    ps_a.serialize_exact (iso.b_to_a xb)
+  in
+  let is_valid_b (pre:bytes_compatible_pre bytes) (xb:b) =
+    ps_a.is_valid_exact pre (iso.b_to_a xb)
+  in
+  {
+    parse_exact = parse_b;
+    serialize_exact = serialize_b;
+    parse_serialize_inv_exact = (fun (x:b) ->
+      iso.b_to_a_to_b x;
+      ps_a.parse_serialize_inv_exact (iso.b_to_a x)
+    );
+    serialize_parse_inv_exact = (fun (buf:bytes) ->
+      match ps_a.parse_exact buf with
+      | Some xa -> (
+        iso.a_to_b_to_a xa;
+        ps_a.serialize_parse_inv_exact buf
+      )
+      | None -> ()
+    );
+    is_valid_exact = is_valid_b;
+    parse_pre_exact = (fun pre buf ->
+      introduce forall xa. iso.b_to_a (iso.a_to_b xa) == xa with iso.a_to_b_to_a xa;
+      ps_a.parse_pre_exact pre buf
+    );
+    serialize_pre_exact = (fun pre xb ->
+      iso.b_to_a_to_b xb;
+      ps_a.serialize_pre_exact pre (iso.b_to_a xb)
+    );
+  }
+
+let isomorphism_exact_is_valid #bytes #bl #a #b ps_a iso pre xb = ()
+
 
 (*** Parser for variable-length lists ***)
 
