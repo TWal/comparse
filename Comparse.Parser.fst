@@ -306,6 +306,8 @@ let ps_nat_lbytes #bytes #bl sz =
     serialize_pre = (fun pre n -> assert_norm (for_allP pre (serialize_nat_lbytes n) <==> pre (from_nat sz n <: bytes)));
   }
 
+let ps_nat_lbytes_is_not_unit #bytes #bl n = ()
+
 let ps_nat_lbytes_is_valid #bytes #bl sz pre x = ()
 
 (*** Exact parsers ***)
@@ -735,3 +737,158 @@ let ps_nat_accelerate #bytes #bl ps_nat_slow =
 let ps_true_nat #bytes #bl =
   assert_norm(forall pre n. (ps_nat_unary #bytes).is_valid pre n); //???
   mk_isomorphism (refined nat true_nat_pred) (ps_nat_accelerate ps_nat_unary) (fun n -> n) (fun n -> n)
+
+(*** QUIC-style length ***)
+
+type nat_lbits (sz:nat) = n:nat{n < pow2 sz}
+
+#push-options "--z3rlimit 100"
+val euclidean_div_uniqueness: b:pos -> q1:nat -> q2:nat -> r1:nat -> r2:nat -> Lemma
+  (requires r1 < b /\ r2 < b /\ (q1*b + r1 == q2*b + r2))
+  (ensures q1 == q2 /\ r1 == r2)
+let rec euclidean_div_uniqueness b q1 q2 r1 r2 =
+  if q2 < q1 then (
+    euclidean_div_uniqueness b q2 q1 r2 r1
+  ) else (
+    if q1 = 0 then (
+      ()
+    ) else (
+      euclidean_div_uniqueness b (q1-1) (q2-1) r1 r2
+    )
+  )
+#pop-options
+
+val split_nat_lbits_isomorphism: sz1:nat -> sz2:nat -> isomorphism_between (nat_lbits (sz1+sz2)) (nat_lbits sz1 & nat_lbits sz2)
+let split_nat_lbits_isomorphism sz1 sz2 =
+  let open FStar.Math.Lemmas in
+  introduce forall (n:nat_lbits (sz1+sz2)). n / (pow2 sz2) < pow2 sz1 with (
+    lemma_div_lt_nat n (sz1+sz2) sz2
+  );
+  introduce forall (n1:nat_lbits sz1) (n2:nat_lbits sz2). n1 * (pow2 sz2) + n2 < pow2 (sz1+sz2) with (
+    lemma_mult_le_right (pow2 sz2) n1 ((pow2 sz1)-1);
+    distributivity_sub_left (pow2 sz1) 1 (pow2 sz2);
+    pow2_plus sz1 sz2
+  );
+  introduce forall (n:nat_lbits (sz1+sz2)). (n / (pow2 sz2)) * (pow2 sz2) + (n % (pow2 sz2)) == n with (
+    euclidean_division_definition n (pow2 sz2)
+  );
+  introduce forall (n1:nat_lbits sz1) (n2:nat_lbits sz2). (n1 * (pow2 sz2) + n2) / (pow2 sz2) == n1 /\ (n1 * (pow2 sz2) + n2) % (pow2 sz2) == n2 with (
+    let n = (n1 * (pow2 sz2) + n2) in
+    euclidean_division_definition n (pow2 sz2);
+    euclidean_div_uniqueness (pow2 sz2) n1 ((n1 * (pow2 sz2) + n2) / (pow2 sz2)) n2 ((n1 * (pow2 sz2) + n2) % (pow2 sz2))
+  );
+  mk_isomorphism_between #(nat_lbits (sz1+sz2)) #(nat_lbits sz1 & nat_lbits sz2)
+    (fun n -> (n / (pow2 sz2), n % (pow2 sz2)))
+    (fun (n1, n2) -> n1 * (pow2 sz2) + n2)
+
+val flip_isomorphism: #a:Type -> #b:Type -> isomorphism_between a b -> isomorphism_between b a
+let flip_isomorphism #a #b iso =
+  {
+    a_to_b = iso.b_to_a;
+    b_to_a = iso.a_to_b;
+    a_to_b_to_a = iso.b_to_a_to_b;
+    b_to_a_to_b = iso.a_to_b_to_a;
+  }
+
+val concat_nat_lbits_isomorphism: sz1:nat -> sz2:nat -> isomorphism_between (nat_lbits sz1 & nat_lbits sz2) (nat_lbits (sz1+sz2))
+let concat_nat_lbits_isomorphism sz1 sz2 =
+  flip_isomorphism (split_nat_lbits_isomorphism sz1 sz2)
+
+val split_nat_lbits: #bytes:Type0 -> {|bytes_like bytes|} -> sz1:nat -> sz2:nat -> parser_serializer bytes (nat_lbits (sz1+sz2)) -> parser_serializer bytes (nat_lbits sz1 & nat_lbits sz2)
+let split_nat_lbits #bytes #bl sz1 sz2 ps_n =
+  isomorphism ps_n (split_nat_lbits_isomorphism sz1 sz2)
+
+val isomorphism_subset: #bytes:Type0 -> {|bytes_like bytes|} -> a:Type -> b:Type -> ps_a:parser_serializer bytes a ->
+  a_to_b:(a -> option b) -> b_to_a:(b -> a) ->
+  a_to_b_to_a: (xa:a -> squash (match a_to_b xa with | None -> True | Some xb -> xa == b_to_a xb)) ->
+  b_to_a_to_b: (xb:b -> squash (a_to_b (b_to_a xb) == Some xb)) ->
+  parser_serializer bytes b
+let isomorphism_subset #bytes #bl a b ps_a a_to_b b_to_a a_to_b_to_a b_to_a_to_b =
+  let a_pred (xa:a) = Some? (a_to_b xa) in
+  let iso = Mkisomorphism_between #(refined a a_pred) #b
+    (fun xa -> Some?.v (a_to_b xa))
+    (fun xb -> b_to_a_to_b xb; (b_to_a xb))
+    (fun xa -> a_to_b_to_a xa)
+    (fun xb -> b_to_a_to_b xb)
+  in
+  isomorphism (refine ps_a a_pred) iso
+
+let ps_quic_nat #bytes #bl =
+  let open FStar.Math.Lemmas in
+  assert_norm(normalize_term (pow2 62) == pow2 62);
+  assert_norm(pow2 2 = 4);
+  let loglen_to_rem_nbits (loglen:nat_lbits 2) = (8*((pow2 loglen)-1)) in
+  let first_byte_to_len (first_byte:((nat_lbits 2) & (nat_lbits 6))): Pure nat (requires True) (fun res -> res <= 7) =
+    let (loglen, b1) = first_byte in
+    pow2_le_compat 3 loglen;
+    assert_norm(pow2 3 = 8);
+    (pow2 loglen)-1
+  in
+  let first_byte_to_type (first_byte:((nat_lbits 2) & (nat_lbits 6))) =
+    nat_lbytes (first_byte_to_len first_byte)
+  in
+  let first_byte_to_parser (first_byte:((nat_lbits 2) & (nat_lbits 6))): parser_serializer_unit bytes (first_byte_to_type first_byte) =
+    let len = first_byte_to_len first_byte in
+    ps_nat_lbytes len
+  in
+  let ps_first_byte = split_nat_lbits #bytes 2 6 (mk_trivial_isomorphism (ps_nat_lbytes 1)) in
+  let loglen_property (loglen:nat_lbits 2) (n:quic_nat) =
+    n < pow2 (6 + loglen_to_rem_nbits loglen) /\ (loglen <> 0 ==> pow2 (6 + loglen_to_rem_nbits (loglen-1)) <= n)
+  in
+  let n_to_loglen (n:quic_nat): Pure (nat_lbits 2) (requires True) (ensures fun loglen -> loglen_property loglen n) =
+    assert_norm (loglen_to_rem_nbits 0 = 0);
+    assert_norm (loglen_to_rem_nbits 1 = 8*1);
+    assert_norm (loglen_to_rem_nbits 2 = 8*3);
+    assert_norm (loglen_to_rem_nbits 3 = 8*7);
+    if n < pow2 (6 + loglen_to_rem_nbits 0) then 0
+    else if n < pow2 (6 + loglen_to_rem_nbits 1) then 1
+    else if n < pow2 (6 + loglen_to_rem_nbits 2) then 2
+    else 3
+  in
+  let n_to_loglen_unique (loglen:nat_lbits 2) (n:quic_nat): Lemma (requires loglen_property loglen n) (ensures loglen == n_to_loglen n) =
+    if loglen < n_to_loglen n then (
+      pow2_lt_compat loglen ((n_to_loglen n)-1);
+      pow2_lt_compat (6 + loglen_to_rem_nbits ((n_to_loglen n)-1)) (6 + loglen_to_rem_nbits loglen)
+    ) else if loglen > n_to_loglen n then (
+      pow2_lt_compat (loglen-1) (n_to_loglen n);
+      pow2_lt_compat (6 + loglen_to_rem_nbits (loglen-1)) (6 + loglen_to_rem_nbits (n_to_loglen n))
+    ) else ()
+  in
+
+  let a_to_b (x:(dtuple2 ((nat_lbits 2) & (nat_lbits 6)) first_byte_to_type)): option quic_nat =
+    let (|first_byte, bn|) = x in
+    let (loglen, b1) = first_byte in
+    let len = first_byte_to_len first_byte in
+    pow2_le_compat 62 (6+8*len);
+    let res = (concat_nat_lbits_isomorphism 6 (8*len)).a_to_b (b1, bn) in
+    if loglen = 0 || pow2 (6 + loglen_to_rem_nbits (loglen-1)) <= res then (
+      Some res
+    ) else (
+      None
+    )
+  in
+  let b_to_a (n:quic_nat): (dtuple2 ((nat_lbits 2) & (nat_lbits 6)) first_byte_to_type) =
+    let loglen = n_to_loglen n in
+    let (b1, bn) = (concat_nat_lbits_isomorphism 6 (loglen_to_rem_nbits loglen)).b_to_a n in
+    (|(loglen, b1), bn|)
+  in
+  let a_to_b_to_a (xa:(dtuple2 ((nat_lbits 2) & (nat_lbits 6)) first_byte_to_type)): squash (match a_to_b xa with | None -> True | Some xb -> xa == b_to_a xb) =
+    let (|first_byte, bn|) = xa in
+    let (loglen, b1) = first_byte in
+    let len = first_byte_to_len first_byte in
+    (concat_nat_lbits_isomorphism 6 (loglen_to_rem_nbits loglen)).a_to_b_to_a (b1, bn);
+    pow2_le_compat 62 (6+8*len);
+    let res = (concat_nat_lbits_isomorphism 6 (8*len)).a_to_b (b1, bn) in
+    if loglen = 0 then ()
+    else if pow2 (6 + loglen_to_rem_nbits (loglen-1)) <= res then
+      n_to_loglen_unique loglen res
+    else ()
+  in
+  let b_to_a_to_b (n:quic_nat): squash (a_to_b (b_to_a n) == Some n) =
+    let loglen = n_to_loglen n in
+    (concat_nat_lbits_isomorphism 6 (loglen_to_rem_nbits loglen)).b_to_a_to_b n
+  in
+  isomorphism_subset #bytes #bl (dtuple2 ((nat_lbits 2) & (nat_lbits 6)) first_byte_to_type) quic_nat (bind #_ #_ #_ #first_byte_to_type ps_first_byte first_byte_to_parser)
+    a_to_b b_to_a
+    a_to_b_to_a
+    b_to_a_to_b

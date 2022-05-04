@@ -276,7 +276,14 @@ val ps_lbytes_is_valid:
   Lemma ((ps_lbytes n).is_valid pre x <==> pre (x <: bytes))
   [SMTPat ((ps_lbytes n).is_valid pre x)]
 
-val ps_nat_lbytes: #bytes:Type0 -> {|bytes_like bytes|} -> sz:pos -> parser_serializer bytes (nat_lbytes sz)
+val ps_nat_lbytes: #bytes:Type0 -> {|bytes_like bytes|} -> sz:nat -> parser_serializer_unit bytes (nat_lbytes sz)
+
+val ps_nat_lbytes_is_not_unit:
+  #bytes:Type0 -> {| bl:bytes_like bytes |} -> n:nat ->
+  Lemma
+    (requires 1 <= n)
+    (ensures is_not_unit (ps_nat_lbytes #bytes #bl n))
+    [SMTPat (is_not_unit (ps_nat_lbytes #bytes #bl n))]
 
 val ps_nat_lbytes_is_valid:
   #bytes:Type0 -> {| bytes_like bytes |} -> sz:pos ->
@@ -412,4 +419,14 @@ let ps_bytes (#bytes:Type0) {|bytes_like bytes|}: parser_serializer bytes bytes 
 let ps_seq (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a): parser_serializer bytes (Seq.seq a) =
   mk_trivial_isomorphism (ps_pre_length_seq true_nat_pred ps_true_nat ps_a)
 
-/// TODO: QUIC-style length
+/// QUIC-style length
+
+let quic_nat_pred (n:nat) = n < normalize_term (pow2 62)
+type quic_nat = refined nat quic_nat_pred
+val ps_quic_nat: #bytes:Type0 -> {| bytes_like bytes |} -> nat_parser_serializer bytes quic_nat_pred
+
+type quic_bytes (bytes:Type0) {|bytes_like bytes|} = pre_length_bytes bytes quic_nat_pred
+type quic_seq (#bytes:Type0) {|bytes_like bytes|} (a:Type) (ps_a:parser_serializer bytes a) = pre_length_seq a ps_a quic_nat_pred
+
+let ps_quic_bytes (#bytes:Type0) {|bytes_like bytes|}: parser_serializer bytes (quic_bytes bytes) = ps_pre_length_bytes quic_nat_pred ps_quic_nat
+let ps_quic_seq (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a) = ps_pre_length_seq #bytes quic_nat_pred ps_quic_nat
