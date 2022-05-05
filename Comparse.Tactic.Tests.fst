@@ -1,8 +1,8 @@
-module Comparse.ParserTac.Tests
+module Comparse.Tactic.Tests
 
 open Comparse.Bytes
 open Comparse.Parser
-open Comparse.ParserTac
+open Comparse.Tactic
 
 (*** Features test ***)
 
