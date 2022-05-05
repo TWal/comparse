@@ -1,6 +1,7 @@
 module Comparse.Parser
 
 open Comparse.Bytes
+open Comparse.Tactic.Attributes
 
 (*** Basic definitions ***)
 
@@ -251,6 +252,7 @@ val refine_is_valid:
 
 (*** Parser for basic types ***)
 
+[@@is_parser; is_parser_for (`%unit)]
 val ps_unit: #bytes:Type0 -> {| bytes_like bytes |} -> parser_serializer_unit bytes unit
 
 val ps_unit_is_valid:
@@ -276,6 +278,7 @@ val ps_lbytes_is_valid:
   Lemma ((ps_lbytes n).is_valid pre x <==> pre (x <: bytes))
   [SMTPat ((ps_lbytes n).is_valid pre x)]
 
+[@@is_parser; is_parser_for (`%nat_lbytes)]
 val ps_nat_lbytes: #bytes:Type0 -> {|bytes_like bytes|} -> sz:nat -> parser_serializer_unit bytes (nat_lbytes sz)
 
 val ps_nat_lbytes_is_not_unit:

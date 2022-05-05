@@ -2,6 +2,7 @@ module Comparse.Tactic.Generate
 
 open Comparse.Bytes
 open Comparse.Parser
+open Comparse.Tactic.Attributes
 
 open FStar.Tactics
 
@@ -40,7 +41,7 @@ let my_l_to_r l =
   in
   ctrl_rewrite BottomUp ctrl rw
 
-(*** Handle annotations ***)
+(*** Handle annotations in binders ***)
 
 val find_annotation_in_list: list term -> term -> Tac (option (list term))
 let rec find_annotation_in_list l expected_hd =
@@ -59,6 +60,39 @@ val find_annotation_in_binder: binder -> term -> Tac (option (list term))
 let find_annotation_in_binder b expected_hd =
   let _, (_, annotations) = inspect_binder b in
   find_annotation_in_list annotations expected_hd
+
+(*** Handle `is_parser` attribute ***)
+
+val find_parser_for: fv -> Tac (option term)
+let find_parser_for type_fv =
+  let type_qn = implode_qn (inspect_fv type_fv) in
+  let candidates = lookup_attr (`is_parser) (top_env ()) in
+  let result_fv = Tactics.Util.tryPick (fun parser_fv ->
+    match lookup_typ (top_env ()) (inspect_fv parser_fv) with
+    | None -> None
+    | Some se -> (
+      let attrs = sigelt_attrs se in
+      let is_parser_for_attr = Tactics.Util.tryPick (fun attr_term ->
+        match inspect attr_term with
+        | Tv_App hd (arg, Q_Explicit) -> (
+          match inspect arg with
+          | Tv_Const (C_String s) ->
+            if hd `term_eq` (`is_parser_for) && s = type_qn then
+              Some attr_term
+            else
+              None
+          | _ -> None
+        )
+        | _ -> None
+      ) attrs in
+      match is_parser_for_attr with
+      | Some _ -> Some parser_fv
+      | None -> None
+    )
+  ) candidates in
+  match result_fv with
+  | None -> None
+  | Some x -> Some (pack (Tv_FVar x))
 
 (*** Utility functions ***)
 
@@ -82,15 +116,15 @@ let last l =
 
 val parser_term_from_type_fv: fv -> Tac term
 let parser_term_from_type_fv type_fv =
-  guard (Cons? (inspect_fv type_fv));
-  let (type_module, type_name) = List.Tot.unsnoc (inspect_fv type_fv) in
-  let parser_name = "ps_" ^ type_name in
-  let parser_fullname =
-    if      (implode_qn (inspect_fv type_fv) = "Prims.unit") then explode_qn "Comparse.Parser.ps_unit"
-    else if (implode_qn (inspect_fv type_fv) = "Comparse.Bytes.nat_lbytes") then explode_qn "Comparse.Parser.ps_nat_lbytes"
-    else (List.Tot.snoc (type_module, parser_name))
-  in
-  pack (Tv_FVar (pack_fv parser_fullname))
+  match find_parser_for type_fv with
+  | Some result -> result
+  | None -> (
+    guard (Cons? (inspect_fv type_fv));
+    let (type_module, type_name) = List.Tot.unsnoc (inspect_fv type_fv) in
+    let parser_name = "ps_" ^ type_name in
+    let parser_fullname = (List.Tot.snoc (type_module, parser_name)) in
+    pack (Tv_FVar (pack_fv parser_fullname))
+  )
 
 // `tc (top_env ()) t` doesn't work with bound variables
 // and with splice there is no goal, so no `cur_env ()`
