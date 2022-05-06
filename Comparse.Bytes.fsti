@@ -74,28 +74,5 @@ let bytes_pre_is_compatible (#bytes:Type0) {|bytes_like bytes|} (pre:bytes -> Ty
 type bytes_compatible_pre (bytes:Type0) {|bytes_like bytes|} =
   pre:(bytes -> Type0){bytes_pre_is_compatible pre}
 
-(*
-open FStar.Seq
-
-instance seq_bytes_like (a:Type0): bytes_like (Seq.seq a) =
-  {
-    length = Seq.length;
-
-    empty = Seq.empty;
-    empty_length = (fun () -> ());
-    length_zero = (fun b -> assert(Seq.equal b Seq.empty));
-
-    concat = Seq.append;
-    concat_length = (fun b1 b2 -> ());
-
-    concat_empty_left = (fun b -> assert(Seq.equal (Seq.append Seq.empty b) b));
-
-    slice = Seq.slice;
-    slice_length = (fun b i j -> ());
-
-    slice_concat_left = (fun b1 b2 -> assert(Seq.equal (Seq.slice (Seq.append b1 b2) 0 (Seq.length b1)) b1));
-    slice_concat_right = (fun b1 b2 -> assert(Seq.equal (Seq.slice (Seq.append b1 b2) (Seq.length b1) (Seq.length (Seq.append b1 b2))) b2));
-
-    concat_slice = (fun b i -> assert(Seq.equal (Seq.append (Seq.slice b 0 i) (Seq.slice b i (Seq.length b))) b));
-  }
-*)
+val seq_u8_bytes_like: bytes_like (Seq.seq UInt8.t)
+val refine_bytes_like: bytes:Type0 -> {|bytes_like bytes|} -> pre:bytes_compatible_pre bytes -> bytes_like (b:bytes{pre b})
