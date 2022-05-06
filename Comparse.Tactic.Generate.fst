@@ -175,6 +175,7 @@ let smart_mk_app t args =
 
 val parser_from_type: bytes_impl -> term -> Tac parser_term
 let parser_from_type (bytes_term, bytes_like_term) t =
+  let my_fail () = fail "parser_from_type: head given by `collect_app` is not a fv? (meta program don't handle parametric types, e.g. `option`)" in
   let type_unapplied, type_args = collect_app t in
   match inspect type_unapplied with
   | Tv_FVar fv ->
@@ -186,7 +187,15 @@ let parser_from_type (bytes_term, bytes_like_term) t =
       | None -> (bytes_term, Q_Implicit)::(bytes_like_term, Q_Implicit)::type_args
     in
     (smart_mk_app parser_unapplied (List.Tot.map fst expanded_type_args), t)
-  | _ -> fail "parser_from_type: head given by `collect_app` is not a fv?"
+  | Tv_Var _ -> (
+    if t `term_eq` bytes_term then
+      //Useful in DY* for porting the examples
+      //Not useful in actual protocol meant to be executed
+      (mk_ie_app (`ps_bytes) [bytes_term; bytes_like_term] [], t)
+    else
+      my_fail ()
+  )
+  | _ -> my_fail ()
 
 irreducible let with_parser (#bytes:Type0) {|bytes_like bytes|} (#a:Type0) (x:parser_serializer bytes a) = ()
 
