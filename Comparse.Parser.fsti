@@ -424,7 +424,7 @@ type blbytes (bytes:Type0) {|bytes_like bytes|} (r:size_range) = pre_length_byte
 type blseq (#bytes:Type0) {|bytes_like bytes|} (a:Type) (ps_a:parser_serializer bytes a) (r:size_range) = pre_length_seq a ps_a (in_range r)
 
 let ps_blbytes (#bytes:Type0) {|bytes_like bytes|} (r:size_range): parser_serializer bytes (blbytes bytes r) = ps_pre_length_bytes (in_range r) (ps_nat_in_range r)
-let ps_blseq (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (r:size_range) (ps_a:parser_serializer bytes a) = ps_pre_length_seq #bytes (in_range r) (ps_nat_in_range r)
+let ps_blseq (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (r:size_range) (ps_a:parser_serializer bytes a): parser_serializer bytes (blseq a ps_a r) = ps_pre_length_seq #bytes (in_range r) (ps_nat_in_range r) ps_a
 
 
 /// Length parser/serializer for unbounded length. Useful for proofs.
@@ -454,4 +454,4 @@ type quic_bytes (bytes:Type0) {|bytes_like bytes|} = pre_length_bytes bytes quic
 type quic_seq (#bytes:Type0) {|bytes_like bytes|} (a:Type) (ps_a:parser_serializer bytes a) = pre_length_seq a ps_a quic_nat_pred
 
 let ps_quic_bytes (#bytes:Type0) {|bytes_like bytes|}: parser_serializer bytes (quic_bytes bytes) = ps_pre_length_bytes quic_nat_pred ps_quic_nat
-let ps_quic_seq (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a) = ps_pre_length_seq #bytes quic_nat_pred ps_quic_nat
+let ps_quic_seq (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a): parser_serializer bytes (quic_seq a ps_a) = ps_pre_length_seq #bytes quic_nat_pred ps_quic_nat ps_a
