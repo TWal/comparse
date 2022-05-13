@@ -1,6 +1,6 @@
 module Comparse.Tactic.Tests
 
-open Comparse.Bytes
+open Comparse.Bytes.Typeclass
 open Comparse.Parser
 open Comparse.Tactic
 

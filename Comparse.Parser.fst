@@ -1,7 +1,8 @@
 module Comparse.Parser
 
 open FStar.List.Tot
-open Comparse.Bytes
+open Comparse.Bytes.Typeclass
+open Comparse.Utils
 
 #set-options "--fuel 0 --ifuel 2"
 

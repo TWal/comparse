@@ -1,9 +1,6 @@
-module Comparse.Bytes
+module Comparse.Bytes.Typeclass
 
 open FStar.Mul
-
-val find_nbytes: n:nat -> Pure pos (requires True)
-  (ensures fun res -> (n == 0 /\ res == 1) \/ (pow2 (8 * (res-1)) <= n /\ n < pow2 (8 * res)))
 
 type nat_lbytes (sz:nat) = n:nat{n < normalize_term (pow2 (8*sz))}
 

@@ -1,6 +1,6 @@
 module Comparse.Parser
 
-open Comparse.Bytes
+open Comparse.Bytes.Typeclass
 open Comparse.Tactic.Attributes
 
 (*** Basic definitions ***)
