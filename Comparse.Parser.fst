@@ -623,6 +623,15 @@ let parser_serializer_exact_to_parser_serializer #bytes #bl #a length_pre ps_nat
     );
   }
 
+let bytes_length #bytes #bl #a ps_a l =
+  length ((pse_list ps_a).serialize_exact l)
+
+#push-options "--fuel 1 --ifuel 0"
+let bytes_length_nil #bytes #bl #a ps_a =
+  assert_norm ((pse_list ps_a).serialize_exact [] == _serialize_la ps_a []);
+  empty_length #bytes ()
+#pop-options
+
 type pre_length_list (#bytes:Type0) {|bytes_like bytes|} (a:Type) (ps_a:parser_serializer bytes a) (pre_length:nat -> bool) = l:list a{pre_length (bytes_length ps_a l)}
 
 val ps_pre_length_list: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> pre_length:(nat -> bool) -> ps_length:nat_parser_serializer bytes pre_length -> ps_a:parser_serializer bytes a -> parser_serializer bytes (pre_length_list a ps_a pre_length)

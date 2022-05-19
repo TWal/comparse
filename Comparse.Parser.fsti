@@ -381,8 +381,10 @@ val isomorphism_exact_is_valid:
 
 type nat_parser_serializer (bytes:Type0) {| bytes_like bytes |} (pre_length:nat -> bool)= ps:parser_serializer bytes (refined nat pre_length){forall pre n. ps.is_valid pre n}
 
-let bytes_length (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a) (l:list a) : nat =
-  length ((pse_list ps_a).serialize_exact l)
+val bytes_length: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:parser_serializer bytes a -> l:list a -> nat
+
+val bytes_length_nil: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:parser_serializer bytes a ->
+  Lemma (bytes_length ps_a [] = 0)
 
 type pre_length_bytes (bytes:Type0) {|bytes_like bytes|} (pre_length:nat -> bool) = b:bytes{pre_length (length b)}
 type pre_length_seq (#bytes:Type0) {|bytes_like bytes|} (a:Type) (ps_a:parser_serializer bytes a) (pre_length:nat -> bool) = s:Seq.seq a{pre_length (bytes_length ps_a (Seq.seq_to_list s))}
