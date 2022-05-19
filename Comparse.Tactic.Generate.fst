@@ -371,6 +371,12 @@ let get_tag_from_ctor (ctor_name, ctor_typ) =
   )
   | _ -> None
 
+let rec find_nbytes (n:nat) (acc:nat): Tac nat =
+  if n < pow2 (8 `op_Multiply` acc) then
+    acc
+  else
+    find_nbytes n (acc+1)
+
 val get_tag_from_ctors: list ctor -> Tac (typ & (list term))
 let get_tag_from_ctors ctors =
   let opt_tags = Tactics.Util.map get_tag_from_ctor ctors in
@@ -384,13 +390,7 @@ let get_tag_from_ctors ctors =
     in
     (tag_typ, tag_vals)
   ) else if List.Tot.for_all (None?) opt_tags then (
-    let rec find_nbytes (n:nat): Tac nat =
-      if List.Tot.length ctors < pow2 (8 `op_Multiply` n) then
-        n
-      else
-        find_nbytes (n+1)
-    in
-    let nbytes = find_nbytes 0 in
+    let nbytes = find_nbytes (List.Tot.length ctors) 0 in
     let pack_int i = pack (Tv_Const (C_Int i)) in
     (mk_e_app (`nat_lbytes) [pack_int nbytes], Tactics.Util.mapi (fun i _ -> pack_int i) ctors)
   ) else (
