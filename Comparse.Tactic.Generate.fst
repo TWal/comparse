@@ -358,13 +358,19 @@ let mk_record_parser bi (c_name, c_typ) result_parsed_type =
 irreducible let with_tag (#a:Type0) (x:a) = ()
 // /!\ Don't work as expected, see https://github.com/FStarLang/FStar/issues/2571
 // unfold let with_num_tag (n:nat) (x:nat_lbytes n) = with_tag #(nat_lbytes n) x
+irreducible let with_num_tag (n:nat) (x:nat_lbytes n) = ()
 
 val get_tag_from_ctor: ctor -> Tac (option (typ & term))
 let get_tag_from_ctor (ctor_name, ctor_typ) =
   match inspect ctor_typ with
   | Tv_Arrow b _ -> (
     match find_annotation_in_binder b (`with_tag) with
-    | None -> None
+    | None -> (
+      match find_annotation_in_binder b (`with_num_tag) with
+      | None -> None
+      | Some [tag_sz; tag_val] -> Some (`(nat_lbytes (`#tag_sz)), tag_val)
+      | Some _ -> fail "get_tag_from_ctor: malformed annotation"
+    )
     | Some [tag_typ; tag_val] ->
       Some (tag_typ, tag_val)
     | Some _ -> fail "get_tag_from_ctor: malformed annotation"
@@ -412,11 +418,16 @@ let mk_tag_parser bi tag_typ tag_vals =
   (mk_ie_app (apply_implicit_bytes_impl (`refine) bi) [tag_typ] [tag_parser; pred], mk_e_app (`refined) [tag_typ; pred])
 
 val term_to_pattern: term -> Tac pattern
-let term_to_pattern t =
-  match inspect t with
-  | Tv_FVar fv -> Pat_Cons fv []
-  | Tv_Const c -> Pat_Constant c
-  | _ -> fail "term_to_pattern: term type not handled (not fv or const)"
+let rec term_to_pattern t =
+  let (hd, args) = collect_app t in
+  let args_pat = Tactics.Util.map (fun (arg, q) -> (term_to_pattern arg, Q_Explicit? q)) args in
+  match inspect hd with
+  | Tv_FVar fv ->
+    Pat_Cons fv args_pat
+  | Tv_Const c ->
+    guard (List.Tot.length args = 0);
+    Pat_Constant c
+  | _ -> fail ("term_to_pattern: term type not handled (not fv or const). Term: `" ^ term_to_string t ^ "`")
 
 val mk_middle_sum_type_parser: bytes_impl -> parser_term -> list term -> list ctor -> Tac (parser_term & term)
 let mk_middle_sum_type_parser bi (tag_parser, tag_typ) tag_vals ctors =
@@ -622,7 +633,7 @@ let gen_parser_fun type_fv =
   in
   match inspect_sigelt type_declaration with
   | Sg_Inductive name [] params typ constructors -> (
-    guard (term_eq typ (`Type0));
+    guard (term_eq typ (`Type0) || term_eq typ (`eqtype)); //TODO this is a bit hacky
     let mk_bi_binders (): Tac (binder & binder) =
       let b = pack_binder (fresh_bv_named "bytes" (`Type0)) Q_Implicit [] in
       let bl = pack_binder (fresh_bv_named "bl" (`(bytes_like (`#(binder_to_term b))))) (Q_Meta (`FStar.Tactics.Typeclasses.tcresolve)) [] in
@@ -649,7 +660,9 @@ let gen_parser_fun type_fv =
     let (parser_fun_body, _) =
       match constructors with
       | [ctor] -> (
-        mk_record_parser bi ctor result_parsed_type
+        match get_tag_from_ctor ctor with
+        | Some _ -> mk_sum_type_parser bi [ctor] result_parsed_type
+        | None ->   mk_record_parser bi ctor result_parsed_type
       )
       | ctors -> (
         mk_sum_type_parser bi ctors result_parsed_type
@@ -682,4 +695,3 @@ let gen_parser type_fv =
   }) in
   let sv : sigelt_view = Sg_Let false [parser_letbinding] in
   [pack_sigelt sv]
-
