@@ -387,7 +387,7 @@ val bytes_length_nil: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:pa
   Lemma (bytes_length ps_a [] = 0)
 
 type pre_length_bytes (bytes:Type0) {|bytes_like bytes|} (pre_length:nat -> bool) = b:bytes{pre_length (length b)}
-type pre_length_seq (#bytes:Type0) {|bytes_like bytes|} (a:Type) (ps_a:parser_serializer bytes a) (pre_length:nat -> bool) = s:Seq.seq a{pre_length (bytes_length ps_a (Seq.seq_to_list s))}
+type pre_length_seq (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a) (pre_length:nat -> bool) = s:Seq.seq a{pre_length (bytes_length ps_a (Seq.seq_to_list s))}
 
 
 val ps_pre_length_bytes: #bytes:Type0 -> {|bytes_like bytes|} -> pre_length:(nat -> bool) -> nat_parser_serializer bytes pre_length -> parser_serializer bytes (pre_length_bytes bytes pre_length)
@@ -399,13 +399,13 @@ val ps_pre_length_bytes_is_valid:
   Lemma ((ps_pre_length_bytes pre_length ps_length).is_valid pre x <==> pre x)
   [SMTPat ((ps_pre_length_bytes pre_length ps_length).is_valid pre x)]
 
-val ps_pre_length_seq: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> pre_length:(nat -> bool) -> nat_parser_serializer bytes pre_length -> ps_a:parser_serializer bytes a -> parser_serializer bytes (pre_length_seq a ps_a pre_length)
+val ps_pre_length_seq: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> pre_length:(nat -> bool) -> nat_parser_serializer bytes pre_length -> ps_a:parser_serializer bytes a -> parser_serializer bytes (pre_length_seq ps_a pre_length)
 
 val ps_pre_length_seq_is_valid:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
   pre_length:(nat -> bool) -> ps_length:nat_parser_serializer bytes pre_length ->
   ps_a:parser_serializer bytes a ->
-  pre:bytes_compatible_pre bytes -> x:pre_length_seq a ps_a pre_length ->
+  pre:bytes_compatible_pre bytes -> x:pre_length_seq ps_a pre_length ->
   Lemma ((ps_pre_length_seq pre_length ps_length ps_a).is_valid pre x <==> for_allP (ps_a.is_valid pre) (Seq.seq_to_list x))
   [SMTPat ((ps_pre_length_seq pre_length ps_length ps_a).is_valid pre x)]
 
@@ -423,10 +423,10 @@ type nat_in_range (r:size_range) = refined nat (in_range r)
 val ps_nat_in_range: #bytes:Type0 -> {|bytes_like bytes|} -> r:size_range -> nat_parser_serializer bytes (in_range r)
 
 type blbytes (bytes:Type0) {|bytes_like bytes|} (r:size_range) = pre_length_bytes bytes (in_range r)
-type blseq (#bytes:Type0) {|bytes_like bytes|} (a:Type) (ps_a:parser_serializer bytes a) (r:size_range) = pre_length_seq a ps_a (in_range r)
+type blseq (bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a) (r:size_range) = pre_length_seq ps_a (in_range r)
 
 let ps_blbytes (#bytes:Type0) {|bytes_like bytes|} (r:size_range): parser_serializer bytes (blbytes bytes r) = ps_pre_length_bytes (in_range r) (ps_nat_in_range r)
-let ps_blseq (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (r:size_range) (ps_a:parser_serializer bytes a): parser_serializer bytes (blseq a ps_a r) = ps_pre_length_seq #bytes (in_range r) (ps_nat_in_range r) ps_a
+let ps_blseq (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a) (r:size_range): parser_serializer bytes (blseq bytes ps_a r) = ps_pre_length_seq #bytes (in_range r) (ps_nat_in_range r) ps_a
 
 
 /// Length parser/serializer for unbounded length. Useful for proofs.
@@ -453,7 +453,7 @@ type quic_nat = refined nat quic_nat_pred
 val ps_quic_nat: #bytes:Type0 -> {| bytes_like bytes |} -> nat_parser_serializer bytes quic_nat_pred
 
 type quic_bytes (bytes:Type0) {|bytes_like bytes|} = pre_length_bytes bytes quic_nat_pred
-type quic_seq (#bytes:Type0) {|bytes_like bytes|} (a:Type) (ps_a:parser_serializer bytes a) = pre_length_seq a ps_a quic_nat_pred
+type quic_seq (bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a) = pre_length_seq ps_a quic_nat_pred
 
 let ps_quic_bytes (#bytes:Type0) {|bytes_like bytes|}: parser_serializer bytes (quic_bytes bytes) = ps_pre_length_bytes quic_nat_pred ps_quic_nat
-let ps_quic_seq (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a): parser_serializer bytes (quic_seq a ps_a) = ps_pre_length_seq #bytes quic_nat_pred ps_quic_nat ps_a
+let ps_quic_seq (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a): parser_serializer bytes (quic_seq bytes ps_a) = ps_pre_length_seq #bytes quic_nat_pred ps_quic_nat ps_a

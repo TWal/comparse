@@ -691,9 +691,9 @@ let ps_pre_length_bytes_is_valid #bytes #bl pre_length ps_length pre x = ()
 let ps_pre_length_seq #bytes #bl #a pre_length ps_length ps_a =
   FStar.Classical.forall_intro (Seq.lemma_list_seq_bij #a);
   FStar.Classical.forall_intro (Seq.lemma_seq_list_bij #a);
-  mk_isomorphism (pre_length_seq a ps_a pre_length) (ps_pre_length_list pre_length ps_length ps_a)
+  mk_isomorphism (pre_length_seq ps_a pre_length) (ps_pre_length_list pre_length ps_length ps_a)
     (fun (l:pre_length_list a ps_a pre_length) -> Seq.seq_of_list l)
-    (fun (s:pre_length_seq a ps_a pre_length) -> Seq.seq_to_list s)
+    (fun (s:pre_length_seq ps_a pre_length) -> Seq.seq_to_list s)
 
 let ps_pre_length_seq_is_valid #bytes #bl #a pre_length ps_length ps_a pre x = ()
 
