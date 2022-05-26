@@ -5,9 +5,9 @@ endif
 include $(FSTAR_HOME)/ulib/gmake/fstar.mk
 include $(FSTAR_HOME)/ulib/ml/Makefile.include
 
-SOURCE_DIR = .
+SOURCE_DIR = src
 
-INCLUDE_DIRS =
+INCLUDE_DIRS = $(SOURCE_DIR)
 FSTAR_INCLUDE_DIRS = $(addprefix --include , $(INCLUDE_DIRS))
 
 FSTAR_EXTRACT = --extract '-* +Comparse -Comparse.Tactic'
