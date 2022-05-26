@@ -1,4 +1,4 @@
-module Comparse.Tactic.Generate
+module Comparse.Tactic.GenerateParser
 
 open Comparse.Bytes.Typeclass
 open Comparse.Parser
