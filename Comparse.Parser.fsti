@@ -5,12 +5,12 @@ open Comparse.Tactic.Attributes
 
 (*** Basic definitions ***)
 
-let rec for_allP (#a:Type) (pre:a -> Type0) (l:list a): Type0 =
+let rec for_allP (#a:Type) (pre:a -> prop) (l:list a): prop =
     match l with
     | [] -> True
     | h::t -> pre h /\ for_allP pre t
 
-val for_allP_eq: #a:Type -> pre:(a -> Type0) -> l:list a ->
+val for_allP_eq: #a:Type -> pre:(a -> prop) -> l:list a ->
   Lemma (for_allP pre l <==> (forall x. List.Tot.memP x l ==> pre x))
 
 ///   add_prefixes [prefix0; prefix1; ...; prefixn] suffix
@@ -95,7 +95,7 @@ noeq type parser_serializer_unit (bytes:Type0) {|bytes_like bytes|} (a:Type) = {
     | None -> True
   );
 
-  is_valid: bytes_compatible_pre bytes -> a -> Type0;
+  is_valid: bytes_compatible_pre bytes -> a -> prop;
   //is_valid_trivial: pre:bytes_compatible_pre bytes -> Lemma
   //  (requires forall b. pre b)
   //  (ensures forall x. is_valid pre x);
@@ -323,7 +323,7 @@ noeq type parser_serializer_exact (bytes:Type0) {|bytes_like bytes|} (a:Type) = 
     | None -> True
   );
 
-  is_valid_exact: bytes_compatible_pre bytes -> a -> Type0;
+  is_valid_exact: bytes_compatible_pre bytes -> a -> prop;
   parse_pre_exact: pre:bytes_compatible_pre bytes -> buf:bytes{pre buf} -> Lemma (
     match parse_exact buf with
     | Some x -> is_valid_exact pre x

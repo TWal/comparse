@@ -62,14 +62,14 @@ class bytes_like (bytes:Type0) = {
 /// This type defines a predicate on `bytes` that is compatible with its structure.
 /// It is meant to be used for labeling predicates, which are typically compatible with the `bytes` structure.
 
-let bytes_pre_is_compatible (#bytes:Type0) {|bytes_like bytes|} (pre:bytes -> Type0) =
+let bytes_pre_is_compatible (#bytes:Type0) {|bytes_like bytes|} (pre:bytes -> prop) =
     (pre empty) /\
     (forall b1 b2. pre b1 /\ pre b2 ==> pre (concat b1 b2)) /\
     (forall b i. pre b /\ Some? (split b i) ==> pre (fst (Some?.v (split b i))) /\ pre (snd (Some?.v (split b i)))) /\
     (forall sz n. pre (from_nat sz n))
 
 type bytes_compatible_pre (bytes:Type0) {|bytes_like bytes|} =
-  pre:(bytes -> Type0){bytes_pre_is_compatible pre}
+  pre:(bytes -> prop){bytes_pre_is_compatible pre}
 
 let seq_u8_bytes_like: bytes_like (Seq.seq UInt8.t) = {
   length = Seq.length;

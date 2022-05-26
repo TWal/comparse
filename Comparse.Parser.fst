@@ -23,7 +23,7 @@ let is_not_unit #bytes #bl #a ps_a = forall b. length b == 0 ==> ps_a.parse b ==
 (*** Helper functions ***)
 
 #push-options "--ifuel 1 --fuel 1"
-val for_allP_append: #a:Type -> pre:(a -> Type0) -> l1:list a -> l2:list a -> Lemma
+val for_allP_append: #a:Type -> pre:(a -> prop) -> l1:list a -> l2:list a -> Lemma
   (for_allP pre (l1@l2) <==> for_allP pre l1 /\ for_allP pre l2)
   [SMTPat (for_allP pre (l1@l2))]
 let rec for_allP_append #a pre l1 l2 =
@@ -93,7 +93,7 @@ let bind #bytes #bl #a #b ps_a ps_b =
     let lb = (ps_b xa).serialize xb in
     la@lb
   in
-  let is_valid_ab (pre:bytes_compatible_pre bytes) (x:dtuple2 a b): Type0 =
+  let is_valid_ab (pre:bytes_compatible_pre bytes) (x:dtuple2 a b): prop =
     let (|xa, xb|) = x in
     ps_a.is_valid pre xa /\ (ps_b xa).is_valid pre xb
   in
@@ -384,7 +384,7 @@ let rec _serialize_la #bytes #bl #a ps_a l =
     add_prefixes (ps_a.serialize h) (_serialize_la ps_a t)
 #pop-options
 
-val _is_valid_la: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:parser_serializer bytes a -> pre:bytes_compatible_pre bytes -> l:list a -> Type0
+val _is_valid_la: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:parser_serializer bytes a -> pre:bytes_compatible_pre bytes -> l:list a -> prop
 let _is_valid_la #bytes #bl #a ps_a pre l =
   for_allP (ps_a.is_valid pre) l
 
@@ -392,7 +392,7 @@ let _is_valid_la #bytes #bl #a ps_a pre l =
 let pse_list #bytes #bl #a ps_a =
   let parse_la (buf:bytes) = _parse_la ps_a buf in
   let serialize_la (l:list a): bytes = _serialize_la ps_a l in
-  let is_valid_la (pre:bytes_compatible_pre bytes) (l:list a): Type0 = _is_valid_la ps_a pre l in
+  let is_valid_la (pre:bytes_compatible_pre bytes) (l:list a): prop = _is_valid_la ps_a pre l in
   let rec parse_serialize_inv_la (l:list a): Lemma (parse_la (serialize_la l) == Some l) =
     match l with
     | [] -> empty_length #bytes ()
@@ -478,7 +478,7 @@ let bind_exact #bytes #bl #a #b ps_a ps_b =
     let (|xa, xb|) = x in
     add_prefixes (ps_a.serialize xa) ((ps_b xa).serialize_exact xb)
   in
-  let is_valid_exact (pre:bytes_compatible_pre bytes) (x:dtuple2 a b) =
+  let is_valid_exact (pre:bytes_compatible_pre bytes) (x:dtuple2 a b): prop =
     let (|xa, xb|) = x in
     ps_a.is_valid pre xa /\ (ps_b xa).is_valid_exact pre xb
   in
@@ -847,7 +847,7 @@ let ps_true_nat #bytes #bl =
 
 type nat_lbits (sz:nat) = n:nat{n < pow2 sz}
 
-#push-options "--z3rlimit 100"
+#push-options "--z3rlimit 100 --quake 1/5"
 val euclidean_div_uniqueness: b:pos -> q1:nat -> q2:nat -> r1:nat -> r2:nat -> Lemma
   (requires r1 < b /\ r2 < b /\ (q1*b + r1 == q2*b + r2))
   (ensures q1 == q2 /\ r1 == r2)
