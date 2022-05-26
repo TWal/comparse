@@ -3,43 +3,8 @@ module Comparse.Tactic.Generate
 open Comparse.Bytes.Typeclass
 open Comparse.Parser
 open Comparse.Tactic.Attributes
-
+open Comparse.Tactic.Utils
 open FStar.Tactics
-
-// `l_to_r` is so slow!
-val my_l_to_r: list term -> Tac unit
-let my_l_to_r l =
-  let squashed_equality =
-    match l with
-    | [x] -> x
-    | _ -> fail ""
-  in
-  let squashed_equality_ty = (tc (cur_env ()) squashed_equality) in
-  let x_term =
-    match inspect squashed_equality_ty with
-    | Tv_App squash_term (equality_term, Q_Explicit) -> (
-      guard (squash_term `term_eq` (`squash));
-      let eq2_term, args = collect_app equality_term in
-      guard (eq2_term `term_eq` (`eq2));
-      guard (List.Tot.length args = 3);
-      let [_; (x_term, _); _] = args in
-      guard (Tv_Var? (inspect x_term));
-      x_term
-    )
-    | _ -> fail "malformed equality"
-  in
-  let ctrl (t:term) : Tac (bool & ctrl_flag) =
-    let res =
-      match inspect t with
-      | Tv_Var _ -> t `term_eq` x_term
-      | _ -> false
-    in
-    res, Continue
-  in
-  let rw () : Tac unit =
-    apply_lemma_rw squashed_equality
-  in
-  ctrl_rewrite BottomUp ctrl rw
 
 (*** Handle annotations in binders ***)
 
@@ -108,11 +73,6 @@ let mk_ie_app t implicits explicits =
 val apply_implicit_bytes_impl: term -> bytes_impl -> Tac term
 let apply_implicit_bytes_impl t (bytes_term, bytes_like_term) =
   mk_ie_app t [bytes_term; bytes_like_term] []
-
-val last: #a:Type0 -> list a -> Tac a
-let last l =
-  guard (Cons? l);
-  List.Tot.last l
 
 val parser_term_from_type_fv: fv -> Tac term
 let parser_term_from_type_fv type_fv =
@@ -318,7 +278,7 @@ let prove_record_isomorphism_from_record () =
   destruct (binder_to_term b);
   let binders = intros () in
   let breq = last binders in
-  my_l_to_r [binder_to_term breq];
+  l_to_r_breq [binder_to_term breq];
   trefl ()
 
 val mk_record_isomorphism: bytes_impl -> typ -> name -> list typ -> parser_term -> Tac parser_term
@@ -420,7 +380,7 @@ let mk_tag_parser bi tag_typ tag_vals =
 val term_to_pattern: term -> Tac pattern
 let rec term_to_pattern t =
   let (hd, args) = collect_app t in
-  let args_pat = Tactics.Util.map (fun (arg, q) -> (term_to_pattern arg, Q_Explicit? q)) args in
+  let args_pat = Tactics.Util.map (fun (arg, q) -> (term_to_pattern arg, not (Q_Explicit? q))) args in
   match inspect hd with
   | Tv_FVar fv ->
     Pat_Cons fv args_pat
@@ -535,7 +495,7 @@ let prove_pair_sum_pair_isomorphism () =
     apply (`eq_to_eq);
     apply (`add_squash);
     let x_eq_term = binder_to_term (implies_intro ()) in
-    my_l_to_r [x_eq_term];
+    l_to_r_breq [x_eq_term];
     let _ = repeat (fun () ->
       apply_lemma (`dtuple2_ind);
       let _ = forall_intro () in
@@ -561,7 +521,7 @@ let prove_sum_pair_sum_isomorphism () =
   iterAll (fun () ->
     let destruct_binders = intros() in
     let breq_term = binder_to_term (last destruct_binders) in
-    my_l_to_r [breq_term];
+    l_to_r_breq [breq_term];
     compute();
     trefl ()
   )
@@ -602,30 +562,36 @@ let mk_sum_type_parser bi ctors result_type =
 
 (*** Parser generator ***)
 
-val apply_binder: term -> binder -> Tac term
-let apply_binder t b =
-  let (_, (q, _)) = inspect_binder b in
-  let real_q =
-    match q with
-    | Q_Meta _ -> Q_Implicit
-    | x -> x
+val get_bytes_impl_and_parser_params: list binder -> Tac (bytes_impl & list binder)
+let get_bytes_impl_and_parser_params params =
+  let mk_bi_binders (): Tac (binder & binder) =
+    let b = pack_binder (fresh_bv_named "bytes" (`Type0)) Q_Implicit [] in
+    let bl = pack_binder (fresh_bv_named "bl" (`(bytes_like (`#(binder_to_term b))))) (Q_Meta (`FStar.Tactics.Typeclasses.tcresolve)) [] in
+    (b, bl)
   in
-  pack (Tv_App t (binder_to_term b, real_q))
-
-val apply_binders: term -> list binder -> Tac term
-let rec apply_binders t bs =
-  match bs with
-  | [] -> t
-  | bs_head::bs_tail -> apply_binders (apply_binder t bs_head) bs_tail
+  let ((bytes_binder, bytes_like_binder), tail_params) =
+    match params with
+    | b::bl::tail_params -> (
+      let b_ok = ((type_of_binder b) `term_eq` (`Type0)) in
+      let bl_ok = ((type_of_binder bl) `term_eq` (mk_e_app (`bytes_like) [binder_to_term b])) in
+      let (b_bv, (_, b_annots)) = inspect_binder b in
+      let b_implicit = pack_binder b_bv Q_Implicit b_annots in
+      if b_ok && bl_ok then (
+        ((b_implicit, bl), tail_params)
+      ) else (
+        (mk_bi_binders (), params)
+      )
+    )
+    | _ -> (mk_bi_binders (), params)
+  in
+  let bi = (binder_to_term bytes_binder, binder_to_term bytes_like_binder) in
+  let parser_params = bytes_binder::bytes_like_binder::tail_params in
+  (bi, parser_params)
 
 val gen_parser_fun: term -> Tac (typ & term)
 let gen_parser_fun type_fv =
   let env = top_env () in
-  let type_name =
-    match inspect type_fv with
-    | Tv_FVar fv -> (inspect_fv fv)
-    | _ -> fail "type_fv is not a free variable"
-  in
+  let type_name = get_name_from_fv type_fv in
   let type_declaration =
   match lookup_typ env type_name with
   | Some x -> x
@@ -634,28 +600,8 @@ let gen_parser_fun type_fv =
   match inspect_sigelt type_declaration with
   | Sg_Inductive name [] params typ constructors -> (
     guard (term_eq typ (`Type0) || term_eq typ (`eqtype)); //TODO this is a bit hacky
-    let mk_bi_binders (): Tac (binder & binder) =
-      let b = pack_binder (fresh_bv_named "bytes" (`Type0)) Q_Implicit [] in
-      let bl = pack_binder (fresh_bv_named "bl" (`(bytes_like (`#(binder_to_term b))))) (Q_Meta (`FStar.Tactics.Typeclasses.tcresolve)) [] in
-      (b, bl)
-    in
-    let ((bytes_binder, bytes_like_binder), tail_params) =
-      match params with
-      | b::bl::tail_params -> (
-        let b_ok = ((type_of_binder b) `term_eq` (`Type0)) in
-        let bl_ok = ((type_of_binder bl) `term_eq` (mk_e_app (`bytes_like) [binder_to_term b])) in
-        let (b_bv, (_, b_annots)) = inspect_binder b in
-        let b_implicit = pack_binder b_bv Q_Implicit b_annots in
-        if b_ok && bl_ok then (
-          ((b_implicit, bl), tail_params)
-        ) else (
-          (mk_bi_binders (), params)
-        )
-      )
-      | _ -> (mk_bi_binders (), params)
-    in
-    let bi = (binder_to_term bytes_binder, binder_to_term bytes_like_binder) in
-    let parser_params = bytes_binder::bytes_like_binder::tail_params in
+    let (bi, parser_params) = get_bytes_impl_and_parser_params params in
+    let (bytes_term, bytes_like_term) = bi in
     let result_parsed_type = apply_binders type_fv params in
     let (parser_fun_body, _) =
       match constructors with
@@ -669,7 +615,7 @@ let gen_parser_fun type_fv =
       )
     in
     let parser_fun = mk_abs parser_params parser_fun_body in
-    let unparametrized_parser_type = mk_app (`parser_serializer) [(binder_to_term bytes_binder), Q_Explicit; (binder_to_term bytes_like_binder), Q_Implicit; result_parsed_type, Q_Explicit] in
+    let unparametrized_parser_type = mk_app (`parser_serializer) [bytes_term, Q_Explicit; bytes_like_term, Q_Implicit; result_parsed_type, Q_Explicit] in
     let parser_type = mk_arr parser_params (pack_comp (C_Total unparametrized_parser_type [])) in
     (parser_type, parser_fun)
   )
@@ -678,11 +624,7 @@ let gen_parser_fun type_fv =
 
 val gen_parser: term -> Tac decls
 let gen_parser type_fv =
-  let type_name =
-    match inspect type_fv with
-    | Tv_FVar fv -> inspect_fv fv
-    | _ -> fail "type_fv is not a free variable"
-  in
+  let type_name = get_name_from_fv type_fv in
   let parser_name = List.Tot.snoc (moduleof (top_env ()), "ps_" ^ (last type_name)) in
   let (parser_type, parser_fun) = gen_parser_fun type_fv in
   //dump (term_to_string parser_fun);
@@ -693,5 +635,6 @@ let gen_parser type_fv =
     lb_typ = parser_type;
     lb_def = parser_fun;
   }) in
-  let sv : sigelt_view = Sg_Let false [parser_letbinding] in
-  [pack_sigelt sv]
+  let sv = pack_sigelt (Sg_Let false [parser_letbinding]) in
+  let sv = set_sigelt_attrs [(`"opaque_to_smt")] sv in
+  [sv]
