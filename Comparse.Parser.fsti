@@ -245,7 +245,7 @@ val refine_is_not_unit:
 
 val refine_is_valid:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type ->
-  ps_a:parser_serializer bytes a -> pred:(a -> bool) ->
+  ps_a:parser_serializer_unit bytes a -> pred:(a -> bool) ->
   pre:bytes_compatible_pre bytes -> x:a{pred x} ->
   Lemma ((refine ps_a pred).is_valid pre x <==> ps_a.is_valid pre x)
   [SMTPat ((refine ps_a pred).is_valid pre x)]
