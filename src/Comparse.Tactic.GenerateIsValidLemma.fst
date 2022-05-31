@@ -189,7 +189,7 @@ let gen_is_valid_lemma_def type_fv =
 val gen_is_valid_lemma: term -> Tac decls
 let gen_is_valid_lemma type_fv =
   let type_name = get_name_from_fv type_fv in
-  let lemma_name = List.Tot.snoc (moduleof (top_env ()), "ps_" ^ (last type_name) ^ "_is_valid_lemma") in
+  let lemma_name = List.Tot.snoc (moduleof (top_env ()), "ps_" ^ (last type_name) ^ "_is_valid") in
   let (lemma_type, lemma_val) = gen_is_valid_lemma_def type_fv in
   //dump (term_to_string lemma_type);
   let lemma_letbinding = pack_lb ({
