@@ -697,7 +697,7 @@ let ps_pre_length_seq #bytes #bl #a pre_length ps_length ps_a =
 
 let ps_pre_length_seq_is_valid #bytes #bl #a pre_length ps_length ps_a pre x = ()
 
-let ps_nat_in_range #bytes #bl r =
+let ps_tls_nat #bytes #bl r =
   let sz = find_nbytes r.max in
   mk_isomorphism (refined nat (in_range r)) (refine (ps_nat_lbytes sz) (in_range r)) (fun n -> n) (fun n -> n)
 

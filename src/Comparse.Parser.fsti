@@ -419,14 +419,14 @@ type size_range = {
 let in_range (r:size_range) (x:nat) =
   r.min <= x && x <= r.max
 
-type nat_in_range (r:size_range) = refined nat (in_range r)
-val ps_nat_in_range: #bytes:Type0 -> {|bytes_like bytes|} -> r:size_range -> nat_parser_serializer bytes (in_range r)
+type tls_nat (r:size_range) = refined nat (in_range r)
+val ps_tls_nat: #bytes:Type0 -> {|bytes_like bytes|} -> r:size_range -> nat_parser_serializer bytes (in_range r)
 
-type blbytes (bytes:Type0) {|bytes_like bytes|} (r:size_range) = pre_length_bytes bytes (in_range r)
-type blseq (bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a) (r:size_range) = pre_length_seq ps_a (in_range r)
+type tls_bytes (bytes:Type0) {|bytes_like bytes|} (r:size_range) = pre_length_bytes bytes (in_range r)
+type tls_seq (bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a) (r:size_range) = pre_length_seq ps_a (in_range r)
 
-let ps_blbytes (#bytes:Type0) {|bytes_like bytes|} (r:size_range): parser_serializer bytes (blbytes bytes r) = ps_pre_length_bytes (in_range r) (ps_nat_in_range r)
-let ps_blseq (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a) (r:size_range): parser_serializer bytes (blseq bytes ps_a r) = ps_pre_length_seq #bytes (in_range r) (ps_nat_in_range r) ps_a
+let ps_tls_bytes (#bytes:Type0) {|bytes_like bytes|} (r:size_range): parser_serializer bytes (tls_bytes bytes r) = ps_pre_length_bytes (in_range r) (ps_tls_nat r)
+let ps_tls_seq (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a) (r:size_range): parser_serializer bytes (tls_seq bytes ps_a r) = ps_pre_length_seq #bytes (in_range r) (ps_tls_nat r) ps_a
 
 
 /// Length parser/serializer for unbounded length. Useful for proofs.
