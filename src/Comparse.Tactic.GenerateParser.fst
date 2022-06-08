@@ -91,6 +91,7 @@ let parser_term_from_type_fv type_fv =
 val hacky_get_type: term -> Tac typ
 let hacky_get_type t =
   match t with
+  | Tv_UInst fv _
   | Tv_FVar fv -> tc (top_env ()) t
   | Tv_Var bv -> type_of_bv bv
   | _ -> fail "hacky_get_type: term is not a bv or a fv"
@@ -138,6 +139,7 @@ let parser_from_type (bytes_term, bytes_like_term) t =
   let my_fail () = fail "parser_from_type: head given by `collect_app` is not a fv? (meta program don't handle parametric types, e.g. `option`)" in
   let type_unapplied, type_args = collect_app t in
   match inspect type_unapplied with
+  | Tv_UInst fv _
   | Tv_FVar fv ->
     let parser_unapplied = parser_term_from_type_fv fv in
     let parser_signature = tc (top_env ()) parser_unapplied in
@@ -382,6 +384,7 @@ let rec term_to_pattern t =
   let (hd, args) = collect_app t in
   let args_pat = Tactics.Util.map (fun (arg, q) -> (term_to_pattern arg, not (Q_Explicit? q))) args in
   match inspect hd with
+  | Tv_UInst fv _
   | Tv_FVar fv ->
     Pat_Cons fv args_pat
   | Tv_Const c ->
@@ -531,7 +534,7 @@ let mk_sum_isomorphism bi tag_typ result_typ tag_to_pair_typ tag_vals ctors (pai
   let middle_to_sum_def = mk_middle_to_sum_fun tag_typ tag_to_pair_typ tag_vals ctors in
   let sum_to_middle_def = mk_sum_to_middle_fun result_typ tag_vals ctors in
   let middle_typ = mk_e_app (`dtuple2) [tag_typ; tag_to_pair_typ] in
-  let mk_a_to_b (a:typ) (b:typ) = (pack (Tv_Arrow (fresh_binder a) (pack_comp (C_Total b [])))) in
+  let mk_a_to_b (a:typ) (b:typ) = (pack (Tv_Arrow (fresh_binder a) (pack_comp (C_Total b u_unk [])))) in
   //We need to help F* with the type of things otherwise it is completely lost
   let ascribe_type (t:typ) (x:term) = mk_ie_app (`id) [t] [x] in
   let the_isomorphism = mk_ie_app (`Mkisomorphism_between) [
@@ -616,7 +619,7 @@ let gen_parser_fun type_fv =
     in
     let parser_fun = mk_abs parser_params parser_fun_body in
     let unparametrized_parser_type = mk_app (`parser_serializer) [bytes_term, Q_Explicit; bytes_like_term, Q_Implicit; result_parsed_type, Q_Explicit] in
-    let parser_type = mk_arr parser_params (pack_comp (C_Total unparametrized_parser_type [])) in
+    let parser_type = mk_arr parser_params (pack_comp (C_Total unparametrized_parser_type u_unk [])) in
     (parser_type, parser_fun)
   )
   | Sg_Inductive _ _ _ _ _ -> fail "gen_parser_fun: higher order types are not supported"
