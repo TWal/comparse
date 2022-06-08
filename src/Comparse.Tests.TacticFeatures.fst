@@ -1,5 +1,4 @@
-module Comparse.Tactic.Tests
-
+module Comparse.Tests.TacticFeatures
 open Comparse.Bytes.Typeclass
 open Comparse.Parser
 open Comparse.Tactic
@@ -302,6 +301,6 @@ noeq type test_big_sum (bytes:Type0) {|bytes_like bytes|} =
 %splice [ps_test_big_sum] (gen_parser (`test_big_sum))
 #pop-options
 
-#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+#push-options "--fuel 0 --ifuel 1 --z3rlimit 100 --z3cliopt 'smt.qi.eager_threshold=0'"
 %splice [ps_test_big_sum_is_valid] (gen_is_valid_lemma (`test_big_sum))
 #pop-options
