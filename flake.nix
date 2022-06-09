@@ -2,7 +2,7 @@
   inputs = {
     nixpkgs.url = "nixpkgs";
     fstar-src = {
-      url = "github:FStarLang/FStar?ref=nik_2595";
+      url = "github:FStarLang/FStar";
       flake = false;
     };
 
