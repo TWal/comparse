@@ -26,7 +26,7 @@
     defaultPackage.${system} = comparse;
     hydraJobs = {
       comparse-build.${system} = comparse;
-      # comparse-test.${system} = ...;
+      comparse-tests.${system} = comparse.tests;
     };
   };
 }
