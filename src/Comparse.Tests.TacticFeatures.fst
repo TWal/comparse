@@ -262,6 +262,25 @@ type test_one_element_enum_without_tag =
 %splice [ps_test_one_element_enum_without_tag] (gen_parser (`test_one_element_enum_without_tag))
 #pop-options
 
+noeq type test_dependent_record (bytes:Type0) {|bytes_like bytes|} = {
+  n1: nat_lbytes 1;
+  n2: nat_lbytes n1;
+  tdn1: test_dep_nat_i #bytes n1;
+  tdn2: test_dep_nat_e bytes n2;
+}
+
+#push-options "--fuel 0 --ifuel 0"
+%splice [ps_test_dependent_record] (gen_parser (`test_dependent_record))
+#pop-options
+
+noeq type test_dependent_sum (bytes:Type0) {|bytes_like bytes|} =
+  | TestDependentSum1: n1: nat_lbytes 2 -> n2: nat_lbytes n1 -> tdn1: test_dep_nat_i #bytes n1 -> test_dependent_sum bytes
+  | TestDependentSum2: n1: nat_lbytes 2 -> n2: nat_lbytes (n1 + n1) -> tdn1: test_dep_nat_e bytes (n1+42) -> test_dependent_sum bytes
+
+#push-options "--fuel 0 --ifuel 1"
+%splice [ps_test_dependent_sum] (gen_parser (`test_dependent_sum))
+#pop-options
+
 (*** Stress test ***)
 
 noeq type test_big_record (bytes:Type0) {|bytes_like bytes|} = {

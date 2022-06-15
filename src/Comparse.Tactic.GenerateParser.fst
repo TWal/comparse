@@ -175,16 +175,12 @@ val mk_parser_unit: bytes_impl -> Tac parser_term
 let mk_parser_unit (bytes_term, bytes_like_term) =
   (mk_ie_app (`ps_unit) [bytes_term; bytes_like_term] [], `unit)
 
-val mk_const_function: typ -> term -> Tac term
-let mk_const_function ty t =
-  pack (Tv_Abs (mk_binder (fresh_bv ty)) t)
-
 (*** Parser for nested pairs ***)
 
-val mk_parser_pair: bytes_impl -> parser_term -> parser_term -> Tac parser_term
-let mk_parser_pair bi (ps_a, t_a) (ps_b, t_b) =
-  let ps_ab = mk_ie_app (apply_implicit_bytes_impl (`bind) bi) [t_a; mk_const_function t_a t_b] [ps_a; mk_const_function t_a ps_b] in
-  let t_ab = mk_e_app (`dtuple2) [t_a; mk_const_function t_a t_b] in
+val mk_parser_pair: bytes_impl -> binder -> parser_term -> parser_term -> Tac parser_term
+let mk_parser_pair bi binder_a (ps_a, t_a) (ps_b, t_b) =
+  let ps_ab = mk_ie_app (apply_implicit_bytes_impl (`bind) bi) [t_a; pack (Tv_Abs binder_a t_b)] [ps_a; pack (Tv_Abs binder_a ps_b)] in
+  let t_ab = mk_e_app (`dtuple2) [t_a; pack (Tv_Abs binder_a t_b)] in
   (ps_ab, t_ab)
 
 val mk_parser_pairs: bytes_impl -> list binder -> Tac parser_term
@@ -195,7 +191,7 @@ let rec mk_parser_pairs bi l =
   | h::t -> (
     let pst_h = parser_from_binder bi h in
     let pst_t = mk_parser_pairs bi t in
-    mk_parser_pair bi pst_h pst_t
+    mk_parser_pair bi h pst_h pst_t
   )
 
 (*** Parser for records ***)
@@ -204,16 +200,16 @@ val mkdtuple2_fv: unit -> Tac fv
 let mkdtuple2_fv () =
   pack_fv (explode_qn (`%Mkdtuple2))
 
-val mk_destruct_pairs: list typ -> Tac (pattern & list bv)
+val mk_destruct_pairs: list binder -> Tac (pattern & list bv)
 let rec mk_destruct_pairs l =
   match l with
   | [] -> (Pat_Constant C_Unit, [])
   | [h] -> (
-    let bv_h = fresh_bv h in
+    let bv_h = bv_of_binder h in
     (Pat_Var bv_h, [bv_h])
   )
   | h::t -> (
-    let bv_h = fresh_bv h in
+    let bv_h = bv_of_binder h in
     let (pattern_t, bv_t) = mk_destruct_pairs t in
     let pattern = Pat_Cons (mkdtuple2_fv ()) [(Pat_Var bv_h, false); (pattern_t, false)] in
     let bvs = bv_h::bv_t in
@@ -226,9 +222,9 @@ let mk_construct_record constructor_name bvs =
   let constructor_args = Tactics.Util.map (fun bv -> (pack (Tv_Var bv), Q_Explicit)) bvs in
   mk_app constructor_term constructor_args
 
-val mk_record_isomorphism_f: typ -> name -> list typ -> Tac term
-let mk_record_isomorphism_f result_type constructor_name constructor_types =
-  let (match_pattern, bvs) = mk_destruct_pairs constructor_types in
+val mk_record_isomorphism_f: typ -> name -> list binder -> Tac term
+let mk_record_isomorphism_f result_type constructor_name constructor_binders =
+  let (match_pattern, bvs) = mk_destruct_pairs constructor_binders in
   let match_body = mk_construct_record constructor_name bvs in
   let x_bv = fresh_bv result_type in
   pack (Tv_Abs (mk_binder x_bv) (pack (Tv_Match (pack (Tv_Var x_bv)) None [(match_pattern, match_body)])))
@@ -241,9 +237,9 @@ let rec mk_construct_pairs l =
   | h::t ->
     mk_e_app (`Mkdtuple2) [pack (Tv_Var h); mk_construct_pairs t]
 
-val mk_record_isomorphism_g: typ -> name -> list typ -> Tac term
-let mk_record_isomorphism_g input_type constructor_name constructor_types =
-  let bvs = Tactics.Util.map (fun t -> fresh_bv t) constructor_types in
+val mk_record_isomorphism_g: typ -> name -> list binder -> Tac term
+let mk_record_isomorphism_g input_type constructor_name constructor_binders =
+  let bvs = Tactics.Util.map (fun b -> bv_of_binder b) constructor_binders in
   let match_pattern = Pat_Cons (pack_fv constructor_name) (List.Tot.map (fun bv -> (Pat_Var bv, false)) bvs) in
   let match_body = mk_construct_pairs bvs in
   let x_bv = fresh_bv input_type in
@@ -283,15 +279,15 @@ let prove_record_isomorphism_from_record () =
   l_to_r_breq [binder_to_term breq];
   trefl ()
 
-val mk_record_isomorphism: bytes_impl -> typ -> name -> list typ -> parser_term -> Tac parser_term
-let mk_record_isomorphism bi result_type constructor_name constructor_types (parser_term, parser_type) =
+val mk_record_isomorphism: bytes_impl -> typ -> name -> list binder -> parser_term -> Tac parser_term
+let mk_record_isomorphism bi result_type constructor_name constructor_binders (parser_term, parser_type) =
   let the_isomorphism =
     mk_ie_app (`Mkisomorphism_between) [
       parser_type;
       result_type
     ] [
-      mk_record_isomorphism_f parser_type constructor_name constructor_types;
-      mk_record_isomorphism_g result_type constructor_name constructor_types;
+      mk_record_isomorphism_f parser_type constructor_name constructor_binders;
+      mk_record_isomorphism_g result_type constructor_name constructor_binders;
       (`(synth_by_tactic (wrap_isomorphism_proof prove_record_isomorphism_from_pair)));
       (`(synth_by_tactic (wrap_isomorphism_proof prove_record_isomorphism_from_record)));
     ]
@@ -310,9 +306,8 @@ let mk_record_isomorphism bi result_type constructor_name constructor_types (par
 val mk_record_parser: bytes_impl -> ctor -> typ -> Tac parser_term
 let mk_record_parser bi (c_name, c_typ) result_parsed_type =
   let binders, _ = collect_arr_bs c_typ in
-  let types = List.Tot.map type_of_binder binders in
   let pairs_parser = mk_parser_pairs bi binders in
-  mk_record_isomorphism bi result_parsed_type c_name types pairs_parser
+  mk_record_isomorphism bi result_parsed_type c_name binders pairs_parser
 
 (*** Parser for sum type ***)
 
@@ -432,10 +427,10 @@ let mk_middle_to_sum_fun tag_typ tag_to_pair_typ tag_vals ctors =
   let branches =
     Tactics.Util.map
       (fun (tag_val, (ctor_name, ctor_typ)) ->
-        let types, _ = collect_arr ctor_typ in
-        let (pair_pattern, bvs) = mk_destruct_pairs types in
+        let binders, _ = collect_arr_bs ctor_typ in
+        let (pair_pattern, bvs) = mk_destruct_pairs binders in
         let rec_term = mk_construct_record ctor_name bvs in
-        let bvs = Tactics.Util.map (fun ty -> fresh_bv ty) types in
+        let bvs = Tactics.Util.map (fun b -> bv_of_binder b) binders in
         let pattern = Pat_Cons (mkdtuple2_fv ()) [(term_to_pattern tag_val, false); (pair_pattern, false)] in
         (pattern, rec_term)
       )
@@ -450,8 +445,8 @@ let mk_sum_to_middle_fun sum_typ tag_vals ctors =
   let branches =
     Tactics.Util.map
       (fun (tag_val, (ctor_name, ctor_typ)) ->
-        let (ctor_typs, _) = collect_arr ctor_typ in
-        let bvs = Tactics.Util.map (fun t -> fresh_bv t) ctor_typs in
+        let (ctor_binders, _) = collect_arr_bs ctor_typ in
+        let bvs = Tactics.Util.map (fun b -> bv_of_binder b) ctor_binders in
         let match_pattern = Pat_Cons (pack_fv ctor_name) (List.Tot.map (fun bv -> (Pat_Var bv, false)) bvs) in
         let pairs_term = mk_construct_pairs bvs in
         let match_body = mk_e_app (`Mkdtuple2) [tag_val; pairs_term] in
