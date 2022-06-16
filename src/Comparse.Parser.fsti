@@ -449,6 +449,8 @@ let ps_seq (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer
 /// QUIC-style length
 
 let quic_nat_pred (n:nat) = n < normalize_term (pow2 62)
+let quic_nat_pred_eq (n:nat): Lemma(pow2 62 == normalize_term (pow2 62)) [SMTPat (quic_nat_pred n)] =
+  assert_norm(pow2 62 == normalize_term (pow2 62))
 type quic_nat = refined nat quic_nat_pred
 val ps_quic_nat: #bytes:Type0 -> {| bytes_like bytes |} -> nat_parser_serializer bytes quic_nat_pred
 
