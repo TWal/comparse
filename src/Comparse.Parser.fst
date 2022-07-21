@@ -632,37 +632,6 @@ let bytes_length_nil #bytes #bl #a ps_a =
   empty_length #bytes ()
 #pop-options
 
-type pre_length_list (#bytes:Type0) {|bytes_like bytes|} (a:Type) (ps_a:parser_serializer bytes a) (pre_length:nat -> bool) = l:list a{pre_length (bytes_length ps_a l)}
-
-val ps_pre_length_list: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> pre_length:(nat -> bool) -> ps_length:nat_parser_serializer bytes pre_length -> ps_a:parser_serializer bytes a -> parser_serializer bytes (pre_length_list a ps_a pre_length)
-let ps_pre_length_list #bytes #bl #a pre_length ps_length ps_a =
-  let pse_la = pse_list ps_a in
-  let pse_pre_length_list_a: parser_serializer_exact bytes (pre_length_list a ps_a pre_length) =
-    {
-      parse_exact = (fun buf ->
-        if pre_length (length buf) then
-          match pse_la.parse_exact buf with
-          | Some x ->
-            pse_la.serialize_parse_inv_exact buf;
-            Some (x <: pre_length_list a ps_a pre_length)
-          | None -> None
-        else
-          None
-      );
-      serialize_exact = (fun x ->
-        (pse_list ps_a).serialize_exact x
-      );
-      parse_serialize_inv_exact = (fun x ->
-        pse_la.parse_serialize_inv_exact x
-      );
-      serialize_parse_inv_exact = (fun buf -> pse_la.serialize_parse_inv_exact buf);
-      is_valid_exact = (pse_list ps_a).is_valid_exact;
-      parse_pre_exact = (fun pre buf -> (pse_list ps_a).parse_pre_exact pre buf);
-      serialize_pre_exact = (fun pre x -> (pse_list ps_a).serialize_pre_exact pre x);
-    }
-  in
-  parser_serializer_exact_to_parser_serializer pre_length ps_length pse_pre_length_list_a
-
 let ps_pre_length_bytes #bytes #bl pre_length ps_length =
   let parse_bytes (buf:bytes): option (pre_length_bytes bytes pre_length) =
     if pre_length (length (buf <: bytes)) then
@@ -688,11 +657,42 @@ let ps_pre_length_bytes #bytes #bl pre_length ps_length =
 
 let ps_pre_length_bytes_is_valid #bytes #bl pre_length ps_length pre x = ()
 
+
+let ps_pre_length_list #bytes #bl #a pre_length ps_length ps_a =
+  let pse_la = pse_list ps_a in
+  let pse_pre_length_list_a: parser_serializer_exact bytes (pre_length_list ps_a pre_length) =
+    {
+      parse_exact = (fun buf ->
+        if pre_length (length buf) then
+          match pse_la.parse_exact buf with
+          | Some x ->
+            pse_la.serialize_parse_inv_exact buf;
+            Some (x <: pre_length_list ps_a pre_length)
+          | None -> None
+        else
+          None
+      );
+      serialize_exact = (fun x ->
+        (pse_list ps_a).serialize_exact x
+      );
+      parse_serialize_inv_exact = (fun x ->
+        pse_la.parse_serialize_inv_exact x
+      );
+      serialize_parse_inv_exact = (fun buf -> pse_la.serialize_parse_inv_exact buf);
+      is_valid_exact = (pse_list ps_a).is_valid_exact;
+      parse_pre_exact = (fun pre buf -> (pse_list ps_a).parse_pre_exact pre buf);
+      serialize_pre_exact = (fun pre x -> (pse_list ps_a).serialize_pre_exact pre x);
+    }
+  in
+  parser_serializer_exact_to_parser_serializer pre_length ps_length pse_pre_length_list_a
+
+let ps_pre_length_list_is_valid #bytes #bl #a pre_length ps_length ps_a pre x = ()
+
 let ps_pre_length_seq #bytes #bl #a pre_length ps_length ps_a =
   FStar.Classical.forall_intro (Seq.lemma_list_seq_bij #a);
   FStar.Classical.forall_intro (Seq.lemma_seq_list_bij #a);
   mk_isomorphism (pre_length_seq ps_a pre_length) (ps_pre_length_list pre_length ps_length ps_a)
-    (fun (l:pre_length_list a ps_a pre_length) -> Seq.seq_of_list l)
+    (fun (l:pre_length_list ps_a pre_length) -> Seq.seq_of_list l)
     (fun (s:pre_length_seq ps_a pre_length) -> Seq.seq_to_list s)
 
 let ps_pre_length_seq_is_valid #bytes #bl #a pre_length ps_length ps_a pre x = ()
