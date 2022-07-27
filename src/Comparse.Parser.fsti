@@ -2,6 +2,7 @@ module Comparse.Parser
 
 open Comparse.Bytes.Typeclass
 open Comparse.Tactic.Attributes
+open Comparse.Utils
 
 (*** Basic definitions ***)
 
@@ -16,6 +17,8 @@ val for_allP_eq: #a:Type -> pre:(a -> prop) -> l:list a ->
 ///   add_prefixes [prefix0; prefix1; ...; prefixn] suffix
 /// = concat prefix0 (concat prefix1 (... (concat prefixn suffix)))`
 val add_prefixes: #bytes:Type0 -> {|bytes_like bytes|} -> list (bytes) -> bytes -> bytes
+
+val prefixes_length: #bytes:Type0 -> {|bytes_like bytes|} -> list (bytes) -> nat
 
 /// The following structure defines composable parsers / serializer.
 /// For a structure that is meant to actually be used by the user, see `parser_serializer_exact`.
@@ -163,6 +166,15 @@ val bind_is_valid:
   Lemma ((bind ps_a ps_b).is_valid pre (|xa, xb|) <==> ps_a.is_valid pre xa /\ (ps_b xa).is_valid pre xb)
   [SMTPat ((bind ps_a ps_b).is_valid pre (|xa, xb|))]
 
+// We use `eq2` intsead of `==` because otherwise the inferred type is `int` and not `nat`.
+// This is useful for Comparse.Tactic.GenerateLengthLemma meta-program.
+val bind_length:
+  #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:(a -> Type) ->
+  ps_a:parser_serializer_unit bytes a -> ps_b:(xa:a -> parser_serializer_unit bytes (b xa)) ->
+  xa:a -> xb:b xa ->
+  Lemma (eq2 #nat (prefixes_length ((bind ps_a ps_b).serialize (|xa, xb|))) ((prefixes_length (ps_a.serialize xa)) + (prefixes_length ((ps_b xa).serialize xb))))
+  [SMTPat (prefixes_length ((bind ps_a ps_b).serialize (|xa, xb|)))]
+
 noeq type isomorphism_between (a:Type) (b:Type) = {
   a_to_b: a -> b;
   b_to_a: b -> a;
@@ -226,6 +238,14 @@ val isomorphism_is_valid:
   ((isomorphism ps_a iso).is_valid pre xb <==> ps_a.is_valid pre (iso.b_to_a xb))
   [SMTPat ((isomorphism ps_a iso).is_valid pre xb)]
 
+val isomorphism_length:
+  #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:Type ->
+  ps_a:parser_serializer_unit bytes a -> iso:isomorphism_between a b ->
+  xb:b ->
+  Lemma (prefixes_length ((isomorphism ps_a iso).serialize xb) == prefixes_length (ps_a.serialize (iso.b_to_a xb)))
+  [SMTPat (prefixes_length ((isomorphism ps_a iso).serialize xb))]
+
+
 
 // Introducing this type helps SMTPats to avoid dealing with the lambda `fun x -> pred x`
 type refined (a:Type) (pred:a -> bool) = x:a{pred x}
@@ -250,6 +270,13 @@ val refine_is_valid:
   Lemma ((refine ps_a pred).is_valid pre x <==> ps_a.is_valid pre x)
   [SMTPat ((refine ps_a pred).is_valid pre x)]
 
+val refine_length:
+  #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type ->
+  ps_a:parser_serializer_unit bytes a -> pred:(a -> bool) ->
+  x:a{pred x} ->
+  Lemma (prefixes_length ((refine ps_a pred).serialize x) == prefixes_length (ps_a.serialize x))
+  [SMTPat (prefixes_length ((refine ps_a pred).serialize x))]
+
 (*** Parser for basic types ***)
 
 [@@is_parser; is_parser_for (`%unit)]
@@ -261,6 +288,11 @@ val ps_unit_is_valid:
   Lemma ((ps_unit #bytes #bl).is_valid pre x <==> True)
   [SMTPat ((ps_unit #bytes #bl).is_valid pre x)]
 
+val ps_unit_length:
+  #bytes:Type0 -> {| bl:bytes_like bytes |} ->
+  x:unit ->
+  Lemma (prefixes_length ((ps_unit #bytes #bl).serialize x) == 0)
+  [SMTPat (prefixes_length ((ps_unit #bytes #bl).serialize x))]
 
 type lbytes (bytes:Type0) {|bytes_like bytes|} (n:nat) = b:bytes{length b == n}
 val ps_lbytes: #bytes:Type0 -> {| bytes_like bytes |} -> n:nat -> parser_serializer_unit bytes (lbytes bytes n)
@@ -278,6 +310,12 @@ val ps_lbytes_is_valid:
   Lemma ((ps_lbytes n).is_valid pre x <==> pre (x <: bytes))
   [SMTPat ((ps_lbytes n).is_valid pre x)]
 
+val ps_lbytes_length:
+  #bytes:Type0 -> {| bytes_like bytes |} -> n:nat ->
+  x:lbytes bytes n ->
+  Lemma (prefixes_length ((ps_lbytes n).serialize x) == n)
+  [SMTPat (prefixes_length ((ps_lbytes n).serialize x))]
+
 [@@is_parser; is_parser_for (`%nat_lbytes)]
 val ps_nat_lbytes: #bytes:Type0 -> {|bytes_like bytes|} -> sz:nat -> parser_serializer_unit bytes (nat_lbytes sz)
 
@@ -293,6 +331,13 @@ val ps_nat_lbytes_is_valid:
   pre:bytes_compatible_pre bytes -> x:nat_lbytes sz ->
   Lemma ((ps_nat_lbytes sz).is_valid pre x)
   [SMTPat ((ps_nat_lbytes sz).is_valid pre x)]
+
+val ps_nat_lbytes_length:
+  #bytes:Type0 -> {| bytes_like bytes |} -> sz:pos ->
+  x:nat_lbytes sz ->
+  Lemma (prefixes_length #bytes ((ps_nat_lbytes sz).serialize x) == sz)
+  [SMTPat (prefixes_length #bytes ((ps_nat_lbytes sz).serialize x))]
+
 
 (*** Exact parsers ***)
 
@@ -343,6 +388,13 @@ val ps_to_pse_is_valid:
   Lemma ((ps_to_pse ps_a).is_valid_exact pre x <==> ps_a.is_valid pre x)
   [SMTPat ((ps_to_pse ps_a).is_valid_exact pre x)]
 
+val ps_to_pse_length:
+  #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
+  ps_a:parser_serializer_unit bytes a ->
+  x:a ->
+  Lemma (length ((ps_to_pse ps_a).serialize_exact x) == prefixes_length (ps_a.serialize x))
+  [SMTPat (length ((ps_to_pse ps_a).serialize_exact x))]
+
 val pse_list: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:parser_serializer bytes a -> parser_serializer_exact bytes (list a)
 
 val pse_list_is_valid:
@@ -351,6 +403,18 @@ val pse_list_is_valid:
   pre:bytes_compatible_pre bytes -> l:list a ->
   Lemma ((pse_list ps_a).is_valid_exact pre l <==> for_allP (ps_a.is_valid pre) l)
   [SMTPat ((pse_list ps_a).is_valid_exact pre l)]
+
+let rec bytes_length (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer_unit bytes a) (l:list a): nat =
+  match l with
+  | [] -> 0
+  | h::t -> (prefixes_length (ps_a.serialize h)) + bytes_length ps_a t
+
+val pse_list_length:
+  #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
+  ps_a:parser_serializer bytes a ->
+  l:list a ->
+  Lemma (length ((pse_list ps_a).serialize_exact l) == bytes_length ps_a l)
+  [SMTPat (length ((pse_list ps_a).serialize_exact l))]
 
 val bind_exact: #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:(a -> Type) -> ps_a:parser_serializer_unit bytes a -> ps_b:(xa:a -> parser_serializer_exact bytes (b xa)) -> parser_serializer_exact bytes (dtuple2 a b)
 
@@ -381,11 +445,6 @@ val isomorphism_exact_is_valid:
 
 type nat_parser_serializer (bytes:Type0) {| bytes_like bytes |} (pre_length:nat -> bool)= ps:parser_serializer bytes (refined nat pre_length){forall pre n. ps.is_valid pre n}
 
-val bytes_length: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:parser_serializer bytes a -> l:list a -> nat
-
-val bytes_length_nil: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:parser_serializer bytes a ->
-  Lemma (bytes_length ps_a [] = 0)
-
 type pre_length_bytes (bytes:Type0) {|bytes_like bytes|} (pre_length:nat -> bool) = b:bytes{pre_length (length b)}
 type pre_length_list (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a) (pre_length:nat -> bool) = l:list a{pre_length (bytes_length ps_a l)}
 type pre_length_seq (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a) (pre_length:nat -> bool) = s:Seq.seq a{pre_length (bytes_length ps_a (Seq.seq_to_list s))}
@@ -400,6 +459,13 @@ val ps_pre_length_bytes_is_valid:
   Lemma ((ps_pre_length_bytes pre_length ps_length).is_valid pre x <==> pre x)
   [SMTPat ((ps_pre_length_bytes pre_length ps_length).is_valid pre x)]
 
+val ps_pre_length_bytes_length:
+  #bytes:Type0 -> {|bytes_like bytes|} ->
+  pre_length:(nat -> bool) -> ps_length:nat_parser_serializer bytes pre_length ->
+   x:pre_length_bytes bytes pre_length ->
+  Lemma (prefixes_length ((ps_pre_length_bytes pre_length ps_length).serialize x) == (prefixes_length (ps_length.serialize (length #bytes x))) + (length #bytes x))
+  [SMTPat (prefixes_length ((ps_pre_length_bytes pre_length ps_length).serialize x))]
+
 val ps_pre_length_list: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> pre_length:(nat -> bool) -> nat_parser_serializer bytes pre_length -> ps_a:parser_serializer bytes a -> parser_serializer bytes (pre_length_list ps_a pre_length)
 
 val ps_pre_length_list_is_valid:
@@ -410,6 +476,14 @@ val ps_pre_length_list_is_valid:
   Lemma ((ps_pre_length_list pre_length ps_length ps_a).is_valid pre x <==> for_allP (ps_a.is_valid pre) x)
   [SMTPat ((ps_pre_length_list pre_length ps_length ps_a).is_valid pre x)]
 
+val ps_pre_length_list_length:
+  #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
+  pre_length:(nat -> bool) -> ps_length:nat_parser_serializer bytes pre_length ->
+  ps_a:parser_serializer bytes a ->
+  x:pre_length_list ps_a pre_length ->
+  Lemma (prefixes_length ((ps_pre_length_list pre_length ps_length ps_a).serialize x) == (prefixes_length (ps_length.serialize (bytes_length ps_a x))) + (bytes_length ps_a x))
+  [SMTPat (prefixes_length ((ps_pre_length_list pre_length ps_length ps_a).serialize x))]
+
 val ps_pre_length_seq: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> pre_length:(nat -> bool) -> nat_parser_serializer bytes pre_length -> ps_a:parser_serializer bytes a -> parser_serializer bytes (pre_length_seq ps_a pre_length)
 
 val ps_pre_length_seq_is_valid:
@@ -419,6 +493,14 @@ val ps_pre_length_seq_is_valid:
   pre:bytes_compatible_pre bytes -> x:pre_length_seq ps_a pre_length ->
   Lemma ((ps_pre_length_seq pre_length ps_length ps_a).is_valid pre x <==> for_allP (ps_a.is_valid pre) (Seq.seq_to_list x))
   [SMTPat ((ps_pre_length_seq pre_length ps_length ps_a).is_valid pre x)]
+
+val ps_pre_length_seq_length:
+  #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
+  pre_length:(nat -> bool) -> ps_length:nat_parser_serializer bytes pre_length ->
+  ps_a:parser_serializer bytes a ->
+  x:pre_length_seq ps_a pre_length ->
+  Lemma (prefixes_length ((ps_pre_length_seq pre_length ps_length ps_a).serialize x) == (prefixes_length (ps_length.serialize (bytes_length ps_a (Seq.seq_to_list x)))) + (bytes_length ps_a (Seq.seq_to_list x)))
+  [SMTPat (prefixes_length ((ps_pre_length_seq pre_length ps_length ps_a).serialize x))]
 
 /// Length parser/serializer for TLS-style length in range
 
@@ -432,6 +514,10 @@ let in_range (r:size_range) (x:nat) =
 
 type tls_nat (r:size_range) = refined nat (in_range r)
 val ps_tls_nat: #bytes:Type0 -> {|bytes_like bytes|} -> r:size_range -> nat_parser_serializer bytes (in_range r)
+
+val ps_tls_nat_length: #bytes:Type0 -> {|bytes_like bytes|} -> r:size_range -> x:tls_nat r -> Lemma
+  (prefixes_length #bytes ((ps_tls_nat r).serialize x) == find_nbytes r.max)
+  [SMTPat (prefixes_length #bytes ((ps_tls_nat r).serialize x))]
 
 type tls_bytes (bytes:Type0) {|bytes_like bytes|} (r:size_range) = pre_length_bytes bytes (in_range r)
 type tls_list (bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a) (r:size_range) = pre_length_list ps_a (in_range r)
@@ -469,6 +555,15 @@ let quic_nat_pred_eq (n:nat): Lemma(pow2 62 == normalize_term (pow2 62)) [SMTPat
   assert_norm(pow2 62 == normalize_term (pow2 62))
 type quic_nat = refined nat quic_nat_pred
 val ps_quic_nat: #bytes:Type0 -> {| bytes_like bytes |} -> nat_parser_serializer bytes quic_nat_pred
+
+val ps_quic_nat_length: #bytes:Type0 -> {| bytes_like bytes |} -> x:quic_nat -> Lemma (
+  prefixes_length #bytes (ps_quic_nat.serialize x) == (
+    if x < pow2 6 then 1
+    else if x < pow2 14 then 2
+    else if x < pow2 30 then 4
+    else 8
+  ))
+  [SMTPat (prefixes_length #bytes (ps_quic_nat.serialize x))]
 
 type quic_bytes (bytes:Type0) {|bytes_like bytes|} = pre_length_bytes bytes quic_nat_pred
 type quic_list (bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a) = pre_length_list ps_a quic_nat_pred

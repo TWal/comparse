@@ -586,6 +586,18 @@ let get_bytes_impl_and_parser_params params =
   let parser_params = bytes_binder::bytes_like_binder::tail_params in
   (bi, parser_params)
 
+val is_tagged_type: list ctor -> Tac bool
+let is_tagged_type constructors =
+  match constructors with
+  | [ctor] -> (
+    match get_tag_from_ctor ctor with
+    | Some _ -> true
+    | None ->   false
+  )
+  | ctors -> (
+    true
+  )
+
 val gen_parser_fun: term -> Tac (typ & term)
 let gen_parser_fun type_fv =
   let env = top_env () in
@@ -602,14 +614,11 @@ let gen_parser_fun type_fv =
     let (bytes_term, bytes_like_term) = bi in
     let result_parsed_type = apply_binders type_fv params in
     let (parser_fun_body, _) =
-      match constructors with
-      | [ctor] -> (
-        match get_tag_from_ctor ctor with
-        | Some _ -> mk_sum_type_parser bi [ctor] result_parsed_type
-        | None ->   mk_record_parser bi ctor result_parsed_type
-      )
-      | ctors -> (
-        mk_sum_type_parser bi ctors result_parsed_type
+      if is_tagged_type constructors then (
+        mk_sum_type_parser bi constructors result_parsed_type
+      ) else (
+        guard (Cons? constructors);
+        mk_record_parser bi (Cons?.hd constructors) result_parsed_type
       )
     in
     let parser_fun = mk_abs parser_params parser_fun_body in

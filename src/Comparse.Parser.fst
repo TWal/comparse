@@ -18,6 +18,11 @@ let rec add_prefixes #bytes #bl l suffix =
   | [] -> suffix
   | h::t -> concat h ((add_prefixes t suffix))
 
+let rec prefixes_length #bytes #bl l =
+  match l with
+  | [] -> 0
+  | h::t -> length h + prefixes_length t
+
 let is_not_unit #bytes #bl #a ps_a = forall b. length b == 0 ==> ps_a.parse b == None
 
 (*** Helper functions ***)
@@ -39,14 +44,6 @@ let rec add_prefixes_add_prefixes l1 l2 suffix =
   match l1 with
   | [] -> ()
   | h::t -> add_prefixes_add_prefixes t l2 suffix
-#pop-options
-
-#push-options "--ifuel 1 --fuel 1"
-val prefixes_length: #bytes:Type0 -> {|bytes_like bytes|} -> list bytes -> nat
-let rec prefixes_length #bytes #bl l =
-  match l with
-  | [] -> 0
-  | h::t -> length h + (prefixes_length t)
 #pop-options
 
 #push-options "--fuel 1 --ifuel 1"
@@ -71,6 +68,15 @@ let rec add_prefixes_pre #bytes #bl pre l suffix =
   match l with
   | [] -> ()
   | h::t -> add_prefixes_pre pre t suffix
+#pop-options
+
+#push-options "--fuel 1 --ifuel 1"
+val prefixes_length_concat: #bytes:Type0 -> {|bytes_like bytes|} -> l1:list bytes -> l2:list bytes -> Lemma
+  (prefixes_length (l1@l2) == (prefixes_length l1) + (prefixes_length l2))
+let rec prefixes_length_concat #bytes #bl l1 l2 =
+  match l1 with
+  | [] -> ()
+  | h::t -> prefixes_length_concat t l2
 #pop-options
 
 (*** Parser combinators ***)
@@ -156,6 +162,9 @@ let bind_is_not_unit #bytes #bl #a #b ps_a ps_b =
 
 let bind_is_valid #bytes #bl #a #b ps_a ps_b pre xa xb = ()
 
+let bind_length #bytes #bl #a #b ps_a ps_b xa xb =
+  prefixes_length_concat (ps_a.serialize xa) ((ps_b xa).serialize xb)
+
 let isomorphism #bytes #bl #a #b ps_a iso =
   let parse_b buf =
     match ps_a.parse buf with
@@ -199,6 +208,8 @@ let isomorphism_is_not_unit #bytes #bl #a #b ps_a iso = ()
 
 let isomorphism_is_valid #bytes #bl #a #b ps_a iso pre xb = ()
 
+let isomorphism_length #bytes #bl #a #b ps_a iso xb = ()
+
 let refine #bytes #bl #a ps_a pred =
   {
     parse = (fun buf ->
@@ -220,6 +231,8 @@ let refine_is_not_unit #bytes #bl #a ps_a pred = ()
 
 let refine_is_valid #bytes #bl #a ps_a pred pre x = ()
 
+let refine_length #bytes #bl #a ps_a pred x = ()
+
 (*** Parser for basic types ***)
 
 let ps_unit #bytes #bl =
@@ -234,6 +247,10 @@ let ps_unit #bytes #bl =
   }
 
 let ps_unit_is_valid #bytes #bl pre x = ()
+
+#push-options "--ifuel 0 --fuel 1"
+let ps_unit_length #bytes #bl x = ()
+#pop-options
 
 //WHY THE #bytes #bl EVERYWHERE?????
 #push-options "--fuel 2"
@@ -276,6 +293,10 @@ let ps_lbytes_is_not_unit #bytes #bl n = ()
 
 let ps_lbytes_is_valid #bytes #bl n pre x = ()
 
+#push-options "--ifuel 0 --fuel 2"
+let ps_lbytes_length #bytes #bl n x = ()
+#pop-options
+
 let ps_nat_lbytes #bytes #bl sz =
   let parse_nat_lbytes (buf:bytes): option (nat_lbytes sz & bytes) =
     match (ps_lbytes sz).parse buf with
@@ -310,6 +331,8 @@ let ps_nat_lbytes #bytes #bl sz =
 let ps_nat_lbytes_is_not_unit #bytes #bl n = ()
 
 let ps_nat_lbytes_is_valid #bytes #bl sz pre x = ()
+
+let ps_nat_lbytes_length #bytes #bl sz x = ()
 
 (*** Exact parsers ***)
 
@@ -351,6 +374,10 @@ let ps_to_pse #bytes #bl #a ps_a =
   }
 
 let ps_to_pse_is_valid #bytes #bl #a ps_a pre x = ()
+
+let ps_to_pse_length #bytes #bl #a ps_a x =
+  empty_length #bytes ();
+  add_prefixes_length (ps_a.serialize x) empty
 
 //The following functions are defined here because F* can't reason on recursive functions defined inside a function
 #push-options "--fuel 1"
@@ -462,6 +489,17 @@ let pse_list #bytes #bl #a ps_a =
 let pse_list_is_valid #bytes #bl #a ps_a pre l =
   // ????????
   assert_norm ((pse_list ps_a).is_valid_exact pre l == _is_valid_la ps_a pre l)
+#pop-options
+
+#push-options "--fuel 1"
+let rec pse_list_length #bytes #bl #a ps_a l =
+  assert_norm ((pse_list ps_a).serialize_exact l == _serialize_la ps_a l);
+  match l with
+  | [] -> empty_length #bytes ()
+  | h::t ->
+    assert_norm ((pse_list ps_a).serialize_exact t == _serialize_la ps_a t);
+    add_prefixes_length (ps_a.serialize h) (_serialize_la ps_a t);
+    pse_list_length ps_a t
 #pop-options
 
 let bind_exact #bytes #bl #a #b ps_a ps_b =
@@ -623,16 +661,19 @@ let parser_serializer_exact_to_parser_serializer #bytes #bl #a length_pre ps_nat
     );
   }
 
-let bytes_length #bytes #bl #a ps_a l =
-  length ((pse_list ps_a).serialize_exact l)
+val parser_serializer_exact_to_parser_serializer_length:
+  #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
+  length_pre:(nat -> bool) -> ps_length:nat_parser_serializer bytes length_pre ->
+  pse_a:parser_serializer_exact bytes a{forall x. length_pre (length (pse_a.serialize_exact x))} ->
+  x:a -> Lemma
+  (prefixes_length ((parser_serializer_exact_to_parser_serializer length_pre ps_length pse_a).serialize x) == (prefixes_length (ps_length.serialize (length (pse_a.serialize_exact x)))) + (length (pse_a.serialize_exact x)))
+let parser_serializer_exact_to_parser_serializer_length #bytes #bl #a length_pre ps_length pse_a x =
+  let x_serialized = pse_a.serialize_exact x in
+  prefixes_length_concat (ps_length.serialize (length x_serialized)) [x_serialized];
+  assert_norm (prefixes_length [x_serialized] == length x_serialized)
 
-#push-options "--fuel 1 --ifuel 0"
-let bytes_length_nil #bytes #bl #a ps_a =
-  assert_norm ((pse_list ps_a).serialize_exact [] == _serialize_la ps_a []);
-  empty_length #bytes ()
-#pop-options
-
-let ps_pre_length_bytes #bytes #bl pre_length ps_length =
+val pse_pre_length_bytes: #bytes:Type0 -> {|bytes_like bytes|} -> pre_length:(nat -> bool) -> parser_serializer_exact bytes (pre_length_bytes bytes pre_length)
+let pse_pre_length_bytes #bytes #bl pre_length =
   let parse_bytes (buf:bytes): option (pre_length_bytes bytes pre_length) =
     if pre_length (length (buf <: bytes)) then
       Some buf
@@ -642,51 +683,57 @@ let ps_pre_length_bytes #bytes #bl pre_length ps_length =
   let serialize_bytes (buf:pre_length_bytes bytes pre_length): bytes =
     buf
   in
-  let pse_bytes: parser_serializer_exact bytes (pre_length_bytes bytes pre_length)=
-    {
-      parse_exact = parse_bytes;
-      serialize_exact = serialize_bytes;
-      parse_serialize_inv_exact = (fun _ -> ());
-      serialize_parse_inv_exact = (fun _ -> ());
-      is_valid_exact = (fun pre b -> pre (b <: bytes));
-      parse_pre_exact = (fun pre buf -> ());
-      serialize_pre_exact = (fun pre x -> ());
-    }
-  in
-  parser_serializer_exact_to_parser_serializer pre_length ps_length pse_bytes
+  {
+    parse_exact = parse_bytes;
+    serialize_exact = serialize_bytes;
+    parse_serialize_inv_exact = (fun _ -> ());
+    serialize_parse_inv_exact = (fun _ -> ());
+    is_valid_exact = (fun pre b -> pre (b <: bytes));
+    parse_pre_exact = (fun pre buf -> ());
+    serialize_pre_exact = (fun pre x -> ());
+  }
+
+let ps_pre_length_bytes #bytes #bl pre_length ps_length =
+  parser_serializer_exact_to_parser_serializer pre_length ps_length (pse_pre_length_bytes pre_length)
 
 let ps_pre_length_bytes_is_valid #bytes #bl pre_length ps_length pre x = ()
 
+let ps_pre_length_bytes_length #bytes #bl pre_length ps_length x =
+  parser_serializer_exact_to_parser_serializer_length pre_length ps_length (pse_pre_length_bytes pre_length) x
+
+val pse_pre_length_list: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> pre_length:(nat -> bool) -> ps_a:parser_serializer bytes a -> parser_serializer_exact bytes (pre_length_list ps_a pre_length)
+let pse_pre_length_list #bytes #bl #a pre_length ps_a =
+  let pse_la = pse_list ps_a in
+  {
+    parse_exact = (fun buf ->
+      if pre_length (length buf) then
+        match pse_la.parse_exact buf with
+        | Some x ->
+          pse_la.serialize_parse_inv_exact buf;
+          Some (x <: pre_length_list ps_a pre_length)
+        | None -> None
+      else
+        None
+    );
+    serialize_exact = (fun x ->
+      (pse_list ps_a).serialize_exact x
+    );
+    parse_serialize_inv_exact = (fun x ->
+      pse_la.parse_serialize_inv_exact x
+    );
+    serialize_parse_inv_exact = (fun buf -> pse_la.serialize_parse_inv_exact buf);
+    is_valid_exact = (pse_list ps_a).is_valid_exact;
+    parse_pre_exact = (fun pre buf -> (pse_list ps_a).parse_pre_exact pre buf);
+    serialize_pre_exact = (fun pre x -> (pse_list ps_a).serialize_pre_exact pre x);
+  }
 
 let ps_pre_length_list #bytes #bl #a pre_length ps_length ps_a =
-  let pse_la = pse_list ps_a in
-  let pse_pre_length_list_a: parser_serializer_exact bytes (pre_length_list ps_a pre_length) =
-    {
-      parse_exact = (fun buf ->
-        if pre_length (length buf) then
-          match pse_la.parse_exact buf with
-          | Some x ->
-            pse_la.serialize_parse_inv_exact buf;
-            Some (x <: pre_length_list ps_a pre_length)
-          | None -> None
-        else
-          None
-      );
-      serialize_exact = (fun x ->
-        (pse_list ps_a).serialize_exact x
-      );
-      parse_serialize_inv_exact = (fun x ->
-        pse_la.parse_serialize_inv_exact x
-      );
-      serialize_parse_inv_exact = (fun buf -> pse_la.serialize_parse_inv_exact buf);
-      is_valid_exact = (pse_list ps_a).is_valid_exact;
-      parse_pre_exact = (fun pre buf -> (pse_list ps_a).parse_pre_exact pre buf);
-      serialize_pre_exact = (fun pre x -> (pse_list ps_a).serialize_pre_exact pre x);
-    }
-  in
-  parser_serializer_exact_to_parser_serializer pre_length ps_length pse_pre_length_list_a
+  parser_serializer_exact_to_parser_serializer pre_length ps_length (pse_pre_length_list pre_length ps_a)
 
 let ps_pre_length_list_is_valid #bytes #bl #a pre_length ps_length ps_a pre x = ()
+
+let ps_pre_length_list_length #bytes #bl #a pre_length ps_length ps_a x =
+  parser_serializer_exact_to_parser_serializer_length pre_length ps_length (pse_pre_length_list pre_length ps_a) x
 
 let ps_pre_length_seq #bytes #bl #a pre_length ps_length ps_a =
   FStar.Classical.forall_intro (Seq.lemma_list_seq_bij #a);
@@ -697,9 +744,17 @@ let ps_pre_length_seq #bytes #bl #a pre_length ps_length ps_a =
 
 let ps_pre_length_seq_is_valid #bytes #bl #a pre_length ps_length ps_a pre x = ()
 
+let ps_pre_length_seq_length #bytes #bl #a pre_length ps_length ps_a x = ()
+
+(*** TLS-style length ***)
+
 let ps_tls_nat #bytes #bl r =
   let sz = find_nbytes r.max in
   mk_isomorphism (refined nat (in_range r)) (refine (ps_nat_lbytes sz) (in_range r)) (fun n -> n) (fun n -> n)
+
+let ps_tls_nat_length #bytes #bl r x = ()
+
+(*** Unary-style length ***)
 
 val _parse_nat: #bytes:Type0 -> {| bytes_like bytes |} -> b:bytes -> Tot (option (nat & bytes)) (decreases length b)
 let rec _parse_nat #bytes #bl b =
@@ -993,7 +1048,13 @@ let ps_quic_nat #bytes #bl =
     let loglen = n_to_loglen n in
     (concat_nat_lbits_isomorphism 6 (loglen_to_rem_nbits loglen)).b_to_a_to_b n
   in
-  isomorphism_subset #bytes #bl (dtuple2 ((nat_lbits 2) & (nat_lbits 6)) first_byte_to_type) quic_nat (bind #_ #_ #_ #first_byte_to_type ps_first_byte first_byte_to_parser)
+  isomorphism_subset #bytes #bl (dtuple2 ((nat_lbits 2) & (nat_lbits 6)) first_byte_to_type) quic_nat (bind ps_first_byte first_byte_to_parser)
     a_to_b b_to_a
     a_to_b_to_a
     b_to_a_to_b
+
+let ps_quic_nat_length #bytes #bl n =
+  assert_norm(pow2 0 == 1);
+  assert_norm(pow2 1 == 2);
+  assert_norm(pow2 2 == 4);
+  assert_norm(pow2 3 == 8)

@@ -36,6 +36,10 @@ noeq type test_explicit_implicit (bytes:Type0) {|bytes_like bytes|} = {
 %splice [ps_test_explicit_implicit_is_valid] (gen_is_valid_lemma (`test_explicit_implicit))
 #pop-options
 
+#push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_explicit_implicit_length] (gen_length_lemma (`test_explicit_implicit))
+#pop-options
+
 assume val test_dep_nat_n: nat -> Type0
 assume val test_dep_nat_i: #bytes:Type0 -> {|bytes_like bytes|} -> nat -> Type0
 assume val test_dep_nat_e: bytes:Type0 -> {|bytes_like bytes|} -> nat -> Type0
@@ -58,6 +62,10 @@ noeq type test_dep_fixed (bytes:Type0) {|bytes_like bytes|} = {
 %splice [ps_test_dep_fixed_is_valid] (gen_is_valid_lemma (`test_dep_fixed))
 #pop-options
 
+#push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_dep_fixed_length] (gen_length_lemma (`test_dep_fixed))
+#pop-options
+
 noeq type test_dep_dep (bytes:Type0) {|bytes_like bytes|} (n:nat) = {
   f_n: test_dep_nat_n n;
   f_i: test_dep_nat_i #bytes (n+1);
@@ -70,6 +78,10 @@ noeq type test_dep_dep (bytes:Type0) {|bytes_like bytes|} (n:nat) = {
 
 #push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0'"
 %splice [ps_test_dep_dep_is_valid] (gen_is_valid_lemma (`test_dep_dep))
+#pop-options
+
+#push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_dep_dep_length] (gen_length_lemma (`test_dep_dep))
 #pop-options
 
 noeq type test_no_bytes = {
@@ -86,6 +98,10 @@ noeq type test_no_bytes = {
 %splice [ps_test_no_bytes_is_valid] (gen_is_valid_lemma (`test_no_bytes))
 #pop-options
 
+#push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_no_bytes_length] (gen_length_lemma (`test_no_bytes))
+#pop-options
+
 noeq type test_no_bytes_dep (n:nat) = {
   f_nodep: test_dep_nat_n 256;
   f_dep: test_dep_nat_n n;
@@ -97,6 +113,10 @@ noeq type test_no_bytes_dep (n:nat) = {
 
 #push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0'"
 %splice [ps_test_no_bytes_dep_is_valid] (gen_is_valid_lemma (`test_no_bytes_dep))
+#pop-options
+
+#push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_no_bytes_dep_length] (gen_length_lemma (`test_no_bytes_dep))
 #pop-options
 
 assume val ps_option: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> parser_serializer bytes a -> parser_serializer bytes (option a)
@@ -120,6 +140,10 @@ noeq type test_with_parser (bytes:Type0) {|bytes_like bytes|} (n:nat) = {
 %splice [ps_test_with_parser_is_valid] (gen_is_valid_lemma (`test_with_parser))
 #pop-options
 
+#push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_with_parser_length] (gen_length_lemma (`test_with_parser))
+#pop-options
+
 type test_tag_unit =
   | TagUnit1: unit -> test_tag_unit
   | TagUnit2: unit -> test_tag_unit
@@ -132,6 +156,10 @@ type test_tag_unit =
 
 #push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
 %splice [ps_test_tag_unit_is_valid] (gen_is_valid_lemma (`test_tag_unit))
+#pop-options
+
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_tag_unit_length] (gen_length_lemma (`test_tag_unit))
 #pop-options
 
 type test_tag_simple =
@@ -148,6 +176,10 @@ type test_tag_simple =
 %splice [ps_test_tag_simple_is_valid] (gen_is_valid_lemma (`test_tag_simple))
 #pop-options
 
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_tag_simple_length] (gen_length_lemma (`test_tag_simple))
+#pop-options
+
 noeq type test_sum_no_annot (bytes:Type0) {|bytes_like bytes|} =
   | TestSumNoAnnot_1: test_ni -> test_ei bytes -> test_sum_no_annot bytes
   | TestSumNoAnnot_2: test_ni -> test_sum_no_annot bytes
@@ -159,6 +191,10 @@ noeq type test_sum_no_annot (bytes:Type0) {|bytes_like bytes|} =
 
 #push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
 %splice [ps_test_sum_no_annot_is_valid] (gen_is_valid_lemma (`test_sum_no_annot))
+#pop-options
+
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_sum_no_annot_length] (gen_length_lemma (`test_sum_no_annot))
 #pop-options
 
 noeq type test_sum_num_annot (bytes:Type0) {|bytes_like bytes|} =
@@ -174,6 +210,10 @@ noeq type test_sum_num_annot (bytes:Type0) {|bytes_like bytes|} =
 %splice [ps_test_sum_num_annot_is_valid] (gen_is_valid_lemma (`test_sum_num_annot))
 #pop-options
 
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_sum_num_annot_length] (gen_length_lemma (`test_sum_num_annot))
+#pop-options
+
 noeq type test_sum_with_num_annot (bytes:Type0) {|bytes_like bytes|} =
   | TestSumWithNumAnnot_1: [@@@ with_num_tag 4 42] test_ni -> test_ei bytes -> test_sum_with_num_annot bytes
   | TestSumWithNumAnnot_2: [@@@ with_num_tag 4 1337] test_ni -> test_sum_with_num_annot bytes
@@ -185,6 +225,10 @@ noeq type test_sum_with_num_annot (bytes:Type0) {|bytes_like bytes|} =
 
 #push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
 %splice [ps_test_sum_with_num_annot_is_valid] (gen_is_valid_lemma (`test_sum_with_num_annot))
+#pop-options
+
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_sum_with_num_annot_length] (gen_length_lemma (`test_sum_with_num_annot))
 #pop-options
 
 noeq type test_sum_simple_tag_annot (bytes:Type0) {|bytes_like bytes|} =
@@ -201,6 +245,10 @@ noeq type test_sum_simple_tag_annot (bytes:Type0) {|bytes_like bytes|} =
 //%splice [ps_test_sum_simple_tag_annot_is_valid] (gen_is_valid_lemma (`test_sum_simple_tag_annot))
 //#pop-options
 
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_sum_simple_tag_annot_length] (gen_length_lemma (`test_sum_simple_tag_annot))
+#pop-options
+
 noeq type test_sum_unit_tag_annot (bytes:Type0) {|bytes_like bytes|} =
   | TestSumUnitTagAnnot_1: [@@@ with_tag (TagUnit1 ())] test_ni -> test_ei bytes -> test_sum_unit_tag_annot bytes
   | TestSumUnitTagAnnot_2: [@@@ with_tag (TagUnit2 ())] test_ni -> test_sum_unit_tag_annot bytes
@@ -214,6 +262,10 @@ noeq type test_sum_unit_tag_annot (bytes:Type0) {|bytes_like bytes|} =
 //#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
 //%splice [ps_test_sum_unit_tag_annot_is_valid] (gen_is_valid_lemma (`test_sum_unit_tag_annot))
 //#pop-options
+
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_sum_unit_tag_annot_length] (gen_length_lemma (`test_sum_unit_tag_annot))
+#pop-options
 
 noeq type test_sum_dep (bytes:Type0) {|bytes_like bytes|} (n:nat) =
   | TestSumDep_1: test_ni -> test_ei bytes -> test_sum_dep bytes n
@@ -229,6 +281,10 @@ noeq type test_sum_dep (bytes:Type0) {|bytes_like bytes|} (n:nat) =
 %splice [ps_test_sum_dep_is_valid] (gen_is_valid_lemma (`test_sum_dep))
 #pop-options
 
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_sum_dep_length] (gen_length_lemma (`test_sum_dep))
+#pop-options
+
 // When there is a tag annotation, the meta-program should guess that it is a one-element enum.
 type test_one_element_enum_with_num_tag =
   | TestOneElementEnumWithNumTag: [@@@ with_num_tag 1 1] unit -> test_one_element_enum_with_num_tag
@@ -241,6 +297,10 @@ type test_one_element_enum_with_num_tag =
 %splice [ps_test_one_element_enum_with_num_tag_is_valid] (gen_is_valid_lemma (`test_one_element_enum_with_num_tag))
 #pop-options
 
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_one_element_enum_with_num_tag_length] (gen_length_lemma (`test_one_element_enum_with_num_tag))
+#pop-options
+
 type test_one_element_enum_with_tag =
   | TestOneElementEnumWithTag: [@@@ with_tag #(nat_lbytes 1) 1] unit -> test_one_element_enum_with_tag
 
@@ -250,6 +310,10 @@ type test_one_element_enum_with_tag =
 
 #push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
 %splice [ps_test_one_element_enum_with_tag_is_valid] (gen_is_valid_lemma (`test_one_element_enum_with_tag))
+#pop-options
+
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_one_element_enum_with_tag_length] (gen_length_lemma (`test_one_element_enum_with_tag))
 #pop-options
 
 // When there is no tag annotation it should guess that it's a record type.
@@ -273,6 +337,14 @@ noeq type test_dependent_record (bytes:Type0) {|bytes_like bytes|} = {
 %splice [ps_test_dependent_record] (gen_parser (`test_dependent_record))
 #pop-options
 
+#push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_dependent_record_is_valid] (gen_is_valid_lemma (`test_dependent_record))
+#pop-options
+
+#push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_dependent_record_length] (gen_length_lemma (`test_dependent_record))
+#pop-options
+
 noeq type test_dependent_sum (bytes:Type0) {|bytes_like bytes|} =
   | TestDependentSum1: n1: nat_lbytes 2 -> n2: nat_lbytes n1 -> tdn1: test_dep_nat_i #bytes n1 -> test_dependent_sum bytes
   | TestDependentSum2: n1: nat_lbytes 2 -> n2: nat_lbytes (n1 + n1) -> tdn1: test_dep_nat_e bytes (n1+42) -> test_dependent_sum bytes
@@ -280,6 +352,17 @@ noeq type test_dependent_sum (bytes:Type0) {|bytes_like bytes|} =
 #push-options "--fuel 0 --ifuel 1"
 %splice [ps_test_dependent_sum] (gen_parser (`test_dependent_sum))
 #pop-options
+
+//TODO debug
+//#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+//%splice [ps_test_dependent_sum_is_valid] (gen_is_valid_lemma (`test_dependent_sum))
+//#pop-options
+
+//TODO debug
+//#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+//%splice [ps_test_dependent_sum_length] (gen_length_lemma (`test_dependent_sum))
+//#pop-options
+
 
 (*** Stress test ***)
 
@@ -296,6 +379,10 @@ noeq type test_big_record (bytes:Type0) {|bytes_like bytes|} = {
 
 #push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0'"
 %splice [ps_test_big_record_is_valid] (gen_is_valid_lemma (`test_big_record))
+#pop-options
+
+#push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0' --z3rlimit 100"
+%splice [ps_test_big_record_length] (gen_length_lemma (`test_big_record))
 #pop-options
 
 noeq type test_big_sum (bytes:Type0) {|bytes_like bytes|} =
@@ -322,4 +409,8 @@ noeq type test_big_sum (bytes:Type0) {|bytes_like bytes|} =
 
 #push-options "--fuel 0 --ifuel 1 --z3rlimit 100 --z3cliopt 'smt.qi.eager_threshold=0'"
 %splice [ps_test_big_sum_is_valid] (gen_is_valid_lemma (`test_big_sum))
+#pop-options
+
+#push-options "--fuel 0 --ifuel 1 --z3rlimit 100 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_big_sum_length] (gen_length_lemma (`test_big_sum))
 #pop-options
