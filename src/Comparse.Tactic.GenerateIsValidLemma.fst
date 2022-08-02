@@ -11,7 +11,7 @@ let mk_lemma_type_ensures bi ps_term pre_term x_term ctors =
     let (ctor_name, ctor_type) = c in
     let binders, _ = collect_arr_bs ctor_type in
     let branch_pattern =
-      Pat_Cons (pack_fv ctor_name) (
+      Pat_Cons (pack_fv ctor_name) None (
         Tactics.Util.map (fun b ->
           let (b_bv, (q, _)) = inspect_binder b in
           (Pat_Var b_bv, not (Q_Explicit? q))
@@ -147,10 +147,11 @@ let simplify_is_valid_lemma () =
       ctrl_rewrite TopDown (ctrl_with (`refine)) (rw_with_lemma (`refine_is_valid));
       norm [simplify; iota];
       (try apply (`simplify_and_eq_lemma) with _ -> ())
-    )
+    );
     // The last goals should only be about tags being valid,
     // which the SMT can handle easily if their `is_valid` lemmas were generated.
-    // ;dump "end goal"
+    // dump "end goal";
+    gather_or_solve_explicit_guards_for_resolved_goals ()
   )
 
 val mk_lemma_val: term -> Tac term

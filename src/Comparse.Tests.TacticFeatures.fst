@@ -193,7 +193,7 @@ noeq type test_sum_no_annot (bytes:Type0) {|bytes_like bytes|} =
 %splice [ps_test_sum_no_annot_is_valid] (gen_is_valid_lemma (`test_sum_no_annot))
 #pop-options
 
-#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0' --z3rlimit 50"
 %splice [ps_test_sum_no_annot_length] (gen_length_lemma (`test_sum_no_annot))
 #pop-options
 
@@ -210,7 +210,7 @@ noeq type test_sum_num_annot (bytes:Type0) {|bytes_like bytes|} =
 %splice [ps_test_sum_num_annot_is_valid] (gen_is_valid_lemma (`test_sum_num_annot))
 #pop-options
 
-#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0' --z3rlimit 50"
 %splice [ps_test_sum_num_annot_length] (gen_length_lemma (`test_sum_num_annot))
 #pop-options
 
@@ -227,7 +227,7 @@ noeq type test_sum_with_num_annot (bytes:Type0) {|bytes_like bytes|} =
 %splice [ps_test_sum_with_num_annot_is_valid] (gen_is_valid_lemma (`test_sum_with_num_annot))
 #pop-options
 
-#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0' --z3rlimit 50"
 %splice [ps_test_sum_with_num_annot_length] (gen_length_lemma (`test_sum_with_num_annot))
 #pop-options
 
@@ -240,12 +240,11 @@ noeq type test_sum_simple_tag_annot (bytes:Type0) {|bytes_like bytes|} =
 %splice [ps_test_sum_simple_tag_annot] (gen_parser (`test_sum_simple_tag_annot))
 #pop-options
 
-// Not possible until FStarLang/FStar#2596 is closed
-//#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
-//%splice [ps_test_sum_simple_tag_annot_is_valid] (gen_is_valid_lemma (`test_sum_simple_tag_annot))
-//#pop-options
-
 #push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_sum_simple_tag_annot_is_valid] (gen_is_valid_lemma (`test_sum_simple_tag_annot))
+#pop-options
+
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0' --z3rlimit 50"
 %splice [ps_test_sum_simple_tag_annot_length] (gen_length_lemma (`test_sum_simple_tag_annot))
 #pop-options
 
@@ -258,12 +257,11 @@ noeq type test_sum_unit_tag_annot (bytes:Type0) {|bytes_like bytes|} =
 %splice [ps_test_sum_unit_tag_annot] (gen_parser (`test_sum_unit_tag_annot))
 #pop-options
 
-// Not possible until FStarLang/FStar#2596 is closed
-//#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
-//%splice [ps_test_sum_unit_tag_annot_is_valid] (gen_is_valid_lemma (`test_sum_unit_tag_annot))
-//#pop-options
-
 #push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_sum_unit_tag_annot_is_valid] (gen_is_valid_lemma (`test_sum_unit_tag_annot))
+#pop-options
+
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0' --z3rlimit 50"
 %splice [ps_test_sum_unit_tag_annot_length] (gen_length_lemma (`test_sum_unit_tag_annot))
 #pop-options
 
@@ -281,7 +279,7 @@ noeq type test_sum_dep (bytes:Type0) {|bytes_like bytes|} (n:nat) =
 %splice [ps_test_sum_dep_is_valid] (gen_is_valid_lemma (`test_sum_dep))
 #pop-options
 
-#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0' --z3rlimit 50"
 %splice [ps_test_sum_dep_length] (gen_length_lemma (`test_sum_dep))
 #pop-options
 
@@ -353,15 +351,13 @@ noeq type test_dependent_sum (bytes:Type0) {|bytes_like bytes|} =
 %splice [ps_test_dependent_sum] (gen_parser (`test_dependent_sum))
 #pop-options
 
-//TODO debug
-//#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
-//%splice [ps_test_dependent_sum_is_valid] (gen_is_valid_lemma (`test_dependent_sum))
-//#pop-options
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0' --z3rlimit 50"
+%splice [ps_test_dependent_sum_is_valid] (gen_is_valid_lemma (`test_dependent_sum))
+#pop-options
 
-//TODO debug
-//#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
-//%splice [ps_test_dependent_sum_length] (gen_length_lemma (`test_dependent_sum))
-//#pop-options
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0' --z3rlimit 50"
+%splice [ps_test_dependent_sum_length] (gen_length_lemma (`test_dependent_sum))
+#pop-options
 
 
 (*** Stress test ***)
@@ -381,9 +377,10 @@ noeq type test_big_record (bytes:Type0) {|bytes_like bytes|} = {
 %splice [ps_test_big_record_is_valid] (gen_is_valid_lemma (`test_big_record))
 #pop-options
 
-#push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0' --z3rlimit 100"
-%splice [ps_test_big_record_length] (gen_length_lemma (`test_big_record))
-#pop-options
+// This one is a bit hard on the SMT, with the gather_or_solve_... thing
+//#push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0' --z3rlimit 500"
+//%splice [ps_test_big_record_length] (gen_length_lemma (`test_big_record))
+//#pop-options
 
 noeq type test_big_sum (bytes:Type0) {|bytes_like bytes|} =
   | TestBigSum_0:  test_ni -> test_big_sum bytes

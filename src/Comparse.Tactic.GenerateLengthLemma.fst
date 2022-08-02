@@ -27,7 +27,7 @@ let mk_lemma_type_ensures bi ps_term x_term ctors =
     let (ctor_name, ctor_type) = c in
     let binders, _ = collect_arr_bs ctor_type in
     let branch_pattern =
-      Pat_Cons (pack_fv ctor_name) (
+      Pat_Cons (pack_fv ctor_name) None (
         Tactics.Util.map (fun b ->
           let (b_bv, (q, _)) = inspect_binder b in
           (Pat_Var b_bv, not (Q_Explicit? q))
@@ -182,13 +182,14 @@ let simplify_length_lemma () =
       ctrl_rewrite TopDown (ctrl_with (`bind)) (rw_with_lemma (`bind_length));
       ctrl_rewrite TopDown (ctrl_with (`refine)) (rw_with_lemma (`refine_length));
       norm [primops; iota]
-    )
+    );
 
     // TODO: help the SMT by rewriting associativity of +?
     // goal looks like a+(b+c) == (a+b)+c
 
     // The last goals are easy enough for the SMT
-    // ;dump "end goal"
+    // dump "end goal";
+    gather_or_solve_explicit_guards_for_resolved_goals ()
   )
 
 val mk_lemma_val: term -> Tac term

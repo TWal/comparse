@@ -211,7 +211,7 @@ let rec mk_destruct_pairs l =
   | h::t -> (
     let bv_h = bv_of_binder h in
     let (pattern_t, bv_t) = mk_destruct_pairs t in
-    let pattern = Pat_Cons (mkdtuple2_fv ()) [(Pat_Var bv_h, false); (pattern_t, false)] in
+    let pattern = Pat_Cons (mkdtuple2_fv ()) None [(Pat_Var bv_h, false); (pattern_t, false)] in
     let bvs = bv_h::bv_t in
     (pattern, bvs)
   )
@@ -240,7 +240,7 @@ let rec mk_construct_pairs l =
 val mk_record_isomorphism_g: typ -> name -> list binder -> Tac term
 let mk_record_isomorphism_g input_type constructor_name constructor_binders =
   let bvs = Tactics.Util.map (fun b -> bv_of_binder b) constructor_binders in
-  let match_pattern = Pat_Cons (pack_fv constructor_name) (List.Tot.map (fun bv -> (Pat_Var bv, false)) bvs) in
+  let match_pattern = Pat_Cons (pack_fv constructor_name) None (List.Tot.map (fun bv -> (Pat_Var bv, false)) bvs) in
   let match_body = mk_construct_pairs bvs in
   let x_bv = fresh_bv input_type in
   pack (Tv_Abs (mk_binder x_bv) (pack (Tv_Match (pack (Tv_Var x_bv)) None [(match_pattern, match_body)])))
@@ -268,7 +268,8 @@ let prove_record_isomorphism_from_pair () =
     ()
   ) in
   let _ = forall_intro () in
-  trefl()
+  trefl();
+  gather_or_solve_explicit_guards_for_resolved_goals ()
 
 val prove_record_isomorphism_from_record: unit -> Tac unit
 let prove_record_isomorphism_from_record () =
@@ -277,7 +278,8 @@ let prove_record_isomorphism_from_record () =
   let binders = intros () in
   let breq = last binders in
   l_to_r_breq [binder_to_term breq];
-  trefl ()
+  trefl ();
+  gather_or_solve_explicit_guards_for_resolved_goals ()
 
 val mk_record_isomorphism: bytes_impl -> typ -> name -> list binder -> parser_term -> Tac parser_term
 let mk_record_isomorphism bi result_type constructor_name constructor_binders (parser_term, parser_type) =
@@ -365,10 +367,11 @@ let mk_tag_parser bi tag_typ tag_vals =
   let pred =
     let tag_bv = fresh_bv tag_typ in
     let tag_term = pack (Tv_Var tag_bv) in
-    let mk_disj value acc: Tac term = `(((`#tag_term) = (`#value)) || (`#acc)) in
+    let mk_equality v1 v2 = mk_ie_app (`op_Equality) [tag_typ] [v1; v2] in
+    let mk_disj value acc: Tac term = `(((`#(mk_equality tag_term value))) || (`#acc)) in
     guard (Cons? tag_vals);
     let tag_vals_head::tag_vals_tail = tag_vals in
-    let disj = fold_right mk_disj tag_vals_tail (`((`#tag_term) = (`#tag_vals_head))) in
+    let disj = fold_right mk_disj tag_vals_tail (`((`#(mk_equality tag_term tag_vals_head)))) in
     pack (Tv_Abs (mk_binder tag_bv) disj)
   in
   let (tag_parser, tag_typ) = parser_from_type bi tag_typ in
@@ -381,7 +384,7 @@ let rec term_to_pattern t =
   match inspect hd with
   | Tv_UInst fv _
   | Tv_FVar fv ->
-    Pat_Cons fv args_pat
+    Pat_Cons fv None args_pat
   | Tv_Const c ->
     guard (List.Tot.length args = 0);
     Pat_Constant c
@@ -431,7 +434,7 @@ let mk_middle_to_sum_fun tag_typ tag_to_pair_typ tag_vals ctors =
         let (pair_pattern, bvs) = mk_destruct_pairs binders in
         let rec_term = mk_construct_record ctor_name bvs in
         let bvs = Tactics.Util.map (fun b -> bv_of_binder b) binders in
-        let pattern = Pat_Cons (mkdtuple2_fv ()) [(term_to_pattern tag_val, false); (pair_pattern, false)] in
+        let pattern = Pat_Cons (mkdtuple2_fv ()) None [(term_to_pattern tag_val, false); (pair_pattern, false)] in
         (pattern, rec_term)
       )
       (List.Pure.zip tag_vals ctors)
@@ -447,7 +450,7 @@ let mk_sum_to_middle_fun sum_typ tag_vals ctors =
       (fun (tag_val, (ctor_name, ctor_typ)) ->
         let (ctor_binders, _) = collect_arr_bs ctor_typ in
         let bvs = Tactics.Util.map (fun b -> bv_of_binder b) ctor_binders in
-        let match_pattern = Pat_Cons (pack_fv ctor_name) (List.Tot.map (fun bv -> (Pat_Var bv, false)) bvs) in
+        let match_pattern = Pat_Cons (pack_fv ctor_name) None (List.Tot.map (fun bv -> (Pat_Var bv, false)) bvs) in
         let pairs_term = mk_construct_pairs bvs in
         let match_body = mk_e_app (`Mkdtuple2) [tag_val; pairs_term] in
         (match_pattern, match_body)
@@ -457,7 +460,7 @@ let mk_sum_to_middle_fun sum_typ tag_vals ctors =
   let sum_bv = fresh_bv sum_typ in
   pack (Tv_Abs (mk_binder sum_bv) (pack (Tv_Match (pack (Tv_Var sum_bv)) None branches)))
 
-val refined_ind: a:Type -> pred:(a -> bool) -> p:(a -> Type0) -> squash (forall (x:a). pred x ==> p x) -> squash (forall (x:refined a pred). p x)
+val refined_ind: a:Type -> pred:(a -> bool) -> p:(refined a pred -> Type0) -> squash (forall (x:a). pred x ==> p x) -> squash (forall (x:refined a pred). p x)
 let refined_ind a pred p _ = ()
 
 val or_split: b1:bool -> b2:bool -> p:Type0 -> squash (b1 ==> p) -> squash (b2 ==> p) -> squash (b1 || b2 ==> p)
@@ -484,9 +487,6 @@ val prove_pair_sum_pair_isomorphism: unit -> Tac unit
 let prove_pair_sum_pair_isomorphism () =
   apply_lemma (`dtuple2_ind);
   apply (`refined_ind);
-  // TODO remove this horrible thing.
-  // Need https://github.com/FStarLang/FStar/pull/2482 to be merged first
-  compute(); let _ = repeatn 2 (fun () -> apply (`remove_refine)) in
   let _ = forall_intro () in
   compute ();
   let solve_one_goal () =
@@ -509,7 +509,8 @@ let prove_pair_sum_pair_isomorphism () =
     apply (`or_split);
     focus solve_one_goal
   ) in
-  focus solve_one_goal
+  focus solve_one_goal;
+  gather_or_solve_explicit_guards_for_resolved_goals ()
 
 val prove_sum_pair_sum_isomorphism: unit -> Tac unit
 let prove_sum_pair_sum_isomorphism () =
@@ -522,7 +523,8 @@ let prove_sum_pair_sum_isomorphism () =
     l_to_r_breq [breq_term];
     compute();
     trefl ()
-  )
+  );
+  gather_or_solve_explicit_guards_for_resolved_goals ()
 
 val mk_sum_isomorphism: bytes_impl -> typ -> typ -> term -> list term -> list ctor -> parser_term -> Tac parser_term
 let mk_sum_isomorphism bi tag_typ result_typ tag_to_pair_typ tag_vals ctors (pairs_parser, pairs_typ) =
