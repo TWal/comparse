@@ -1,4 +1,4 @@
-module Comparse.Tactic.GenerateIsValidLemma
+module Comparse.Tactic.GenerateIsWellFormedLemma
 
 open Comparse.Bytes.Typeclass
 open Comparse.Parser
@@ -21,18 +21,18 @@ let mk_lemma_type_ensures bi ps_term pre_term x_term ctors =
     let branch_term =
       Tactics.Util.fold_right (fun b acc ->
         let (ps_b, _) = GenerateParser.parser_from_binder bi b in
-        (`(Mkparser_serializer_unit?.is_valid (`#ps_b) (`#pre_term) (`#(binder_to_term b)) /\ (`#acc)))
+        (`(is_well_formed_partial (`#ps_b) (`#pre_term) (`#(binder_to_term b)) /\ (`#acc)))
       ) binders (`True)
     in
     (branch_pattern, branch_term)
   in
-  let lhs = `(Mkparser_serializer_unit?.is_valid (`#ps_term) (`#pre_term) (`#x_term)) in
+  let lhs = `(is_well_formed_partial (`#ps_term) (`#pre_term) (`#x_term)) in
   let rhs = pack (Tv_Match x_term None (Tactics.Util.map ctor_to_branch ctors)) in
   `((`#lhs) <==> (`#rhs))
 
 val mk_lemma_type_smtpat: term -> term -> term -> Tac term
 let mk_lemma_type_smtpat ps_term pre_term x_term =
-  `(Mkparser_serializer_unit?.is_valid (`#ps_term) (`#pre_term) (`#x_term))
+  `(is_well_formed_partial (`#ps_term) (`#pre_term) (`#x_term))
 
 val mk_lemma_type: term -> list binder -> list ctor -> Tac term
 let mk_lemma_type type_unapplied params ctors =
@@ -58,7 +58,7 @@ let mk_lemma_type type_unapplied params ctors =
 val apply_propositional_extensionality: p1:prop -> p2:prop -> squash (p1 <==> p2) -> squash (p1 == p2)
 let apply_propositional_extensionality p1 p2 _ = FStar.PropositionalExtensionality.apply p1 p2
 
-val my_isomorphism_is_valid_with_id:
+val my_isomorphism_is_well_formed_with_id:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:Type ->
   ps_a:parser_serializer_unit bytes a ->
   a_to_b:(a -> b) -> b_to_a:(b -> a) ->
@@ -66,10 +66,10 @@ val my_isomorphism_is_valid_with_id:
   b_to_a_to_b:(x:b -> squash (a_to_b (b_to_a x) == x)) ->
   pre:bytes_compatible_pre bytes -> xb:b ->
   squash
-  ((isomorphism ps_a ({a_to_b = id a_to_b; b_to_a = id b_to_a; a_to_b_to_a; b_to_a_to_b})).is_valid pre xb <==> ps_a.is_valid pre (b_to_a xb))
-let my_isomorphism_is_valid_with_id #bytes #bl #a #b ps_a a_to_b b_to_a a_to_b_to_a b_to_a_to_b pre xb = ()
+  (is_well_formed_partial (isomorphism ps_a ({a_to_b = id a_to_b; b_to_a = id b_to_a; a_to_b_to_a; b_to_a_to_b})) pre xb <==> is_well_formed_partial ps_a pre (b_to_a xb))
+let my_isomorphism_is_well_formed_with_id #bytes #bl #a #b ps_a a_to_b b_to_a a_to_b_to_a b_to_a_to_b pre xb = ()
 
-val my_isomorphism_is_valid:
+val my_isomorphism_is_well_formed:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:Type ->
   ps_a:parser_serializer_unit bytes a ->
   a_to_b:(a -> b) -> b_to_a:(b -> a) ->
@@ -77,14 +77,14 @@ val my_isomorphism_is_valid:
   b_to_a_to_b:(x:b -> squash (a_to_b (b_to_a x) == x)) ->
   pre:bytes_compatible_pre bytes -> xb:b ->
   squash
-  ((isomorphism ps_a ({a_to_b; b_to_a; a_to_b_to_a; b_to_a_to_b})).is_valid pre xb <==> ps_a.is_valid pre (b_to_a xb))
-let my_isomorphism_is_valid #bytes #bl #a #b ps_a a_to_b b_to_a a_to_b_to_a b_to_a_to_b pre xb = ()
+  (is_well_formed_partial (isomorphism ps_a ({a_to_b; b_to_a; a_to_b_to_a; b_to_a_to_b})) pre xb <==> is_well_formed_partial ps_a pre (b_to_a xb))
+let my_isomorphism_is_well_formed #bytes #bl #a #b ps_a a_to_b b_to_a a_to_b_to_a b_to_a_to_b pre xb = ()
 
 val simplify_and_eq_lemma: p1:prop -> p2:prop -> squash p1 -> squash (p1 /\ p2 <==> p2)
 let simplify_and_eq_lemma p1 p2 _ = ()
 
-val simplify_is_valid_lemma: unit -> Tac unit
-let simplify_is_valid_lemma () =
+val simplify_is_well_formed_lemma: unit -> Tac unit
+let simplify_is_well_formed_lemma () =
   if lax_on() then
     smt ()
   else (
@@ -102,9 +102,9 @@ let simplify_is_valid_lemma () =
         match collect_app p with
         | (eq_term, [lhs, Q_Explicit; rhs, Q_Explicit]) -> (
           guard (eq_term `term_eq` (`(<==>)));
-          let (is_valid_term, args) = collect_app lhs in
+          let (is_well_formed_term, args) = collect_app lhs in
           guard (List.Tot.length args = 6);
-          guard (is_valid_term `term_eq` (`Mkparser_serializer_unit?.is_valid));
+          guard (is_well_formed_term `term_eq` (`is_well_formed_partial));
           (fst (List.Tot.index args 3), fst (List.Tot.index args 5))
         )
         | _ -> fail "goal is not an equiv?"
@@ -120,7 +120,7 @@ let simplify_is_valid_lemma () =
     norm [delta_only [ps_qn]];
     let ctrl_with (what:term) (t:term): Tac (bool & ctrl_flag) =
       let (hd, args) = collect_app t in
-      if hd `term_eq` (`Mkparser_serializer_unit?.is_valid) && List.Tot.length args = 6 then (
+      if hd `term_eq` (`is_well_formed_partial) && List.Tot.length args = 6 then (
         let ps_term = List.Tot.index args 3 in
         let (ps_unapplied_term, _) = collect_app (fst ps_term) in
         (ps_unapplied_term `term_eq` what, Continue)
@@ -135,21 +135,21 @@ let simplify_is_valid_lemma () =
       ) with _ -> trefl()
     in
 
-    ctrl_rewrite TopDown (ctrl_with (`isomorphism)) (rw_with_lemma (`my_isomorphism_is_valid_with_id));
-    ctrl_rewrite TopDown (ctrl_with (`isomorphism)) (rw_with_lemma (`my_isomorphism_is_valid));
+    ctrl_rewrite TopDown (ctrl_with (`isomorphism)) (rw_with_lemma (`my_isomorphism_is_well_formed_with_id));
+    ctrl_rewrite TopDown (ctrl_with (`isomorphism)) (rw_with_lemma (`my_isomorphism_is_well_formed));
 
     destruct x_term;
     iterAll (fun () ->
       let destruct_binders = intros() in
       let breq_term = binder_to_term (last destruct_binders) in
       l_to_r_breq [breq_term];
-      ctrl_rewrite TopDown (ctrl_with (`bind)) (rw_with_lemma (`bind_is_valid));
-      ctrl_rewrite TopDown (ctrl_with (`refine)) (rw_with_lemma (`refine_is_valid));
+      ctrl_rewrite TopDown (ctrl_with (`bind)) (rw_with_lemma (`bind_is_well_formed));
+      ctrl_rewrite TopDown (ctrl_with (`refine)) (rw_with_lemma (`refine_is_well_formed));
       norm [simplify; iota];
       (try apply (`simplify_and_eq_lemma) with _ -> ())
     );
     // The last goals should only be about tags being valid,
-    // which the SMT can handle easily if their `is_valid` lemmas were generated.
+    // which the SMT can handle easily if their `is_well_formed` lemmas were generated.
     // dump "end goal";
     gather_or_solve_explicit_guards_for_resolved_goals ()
   )
@@ -167,10 +167,10 @@ let mk_lemma_val lemma_type =
     | _ -> fail "mk_lemma_val: lemma type is not a Lemma?"
   in
   let x = last (lemma_binders) in
-  mk_abs lemma_binders (`(assert (`#prop) by (simplify_is_valid_lemma ())))
+  mk_abs lemma_binders (`(assert (`#prop) by (simplify_is_well_formed_lemma ())))
 
-val gen_is_valid_lemma_def: term -> Tac (typ & term)
-let gen_is_valid_lemma_def type_fv =
+val gen_is_well_formed_lemma_def: term -> Tac (typ & term)
+let gen_is_well_formed_lemma_def type_fv =
   let env = top_env () in
   let type_name = get_name_from_fv type_fv in
   let type_declaration =
@@ -184,14 +184,14 @@ let gen_is_valid_lemma_def type_fv =
     let lemma_val = mk_lemma_val lemma_type in
     (lemma_type,  lemma_val)
   )
-  | Sg_Inductive _ _ _ _ _ -> fail "gen_is_valid_lemma_def: higher order types are not supported"
-  | _ -> fail "gen_is_valid_lemma_def: only inductives are supported"
+  | Sg_Inductive _ _ _ _ _ -> fail "gen_is_well_formed_lemma_def: higher order types are not supported"
+  | _ -> fail "gen_is_well_formed_lemma_def: only inductives are supported"
 
-val gen_is_valid_lemma: term -> Tac decls
-let gen_is_valid_lemma type_fv =
+val gen_is_well_formed_lemma: term -> Tac decls
+let gen_is_well_formed_lemma type_fv =
   let type_name = get_name_from_fv type_fv in
-  let lemma_name = List.Tot.snoc (moduleof (top_env ()), "ps_" ^ (last type_name) ^ "_is_valid") in
-  let (lemma_type, lemma_val) = gen_is_valid_lemma_def type_fv in
+  let lemma_name = List.Tot.snoc (moduleof (top_env ()), "ps_" ^ (last type_name) ^ "_is_well_formed") in
+  let (lemma_type, lemma_val) = gen_is_well_formed_lemma_def type_fv in
   //dump (term_to_string lemma_type);
   let lemma_letbinding = pack_lb ({
     lb_fv = pack_fv lemma_name;

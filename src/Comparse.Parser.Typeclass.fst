@@ -30,25 +30,32 @@ val serialize_parse_inv_lemma: #bytes:Type0 -> {|bytes_like bytes|} -> a:Type ->
 let serialize_parse_inv_lemma #bytes #bl a #ps buf =
   ps.base.serialize_parse_inv_exact buf
 
-val is_valid: #bytes:Type0 -> {|bytes_like bytes|} -> a:Type -> {|parseable_serializeable bytes a|} -> bytes_compatible_pre bytes -> a -> Type0
-let is_valid #bytes #bl a #ps pre x =
-  ps.base.is_valid_exact pre x
+val is_well_formed: #bytes:Type0 -> {|bytes_like bytes|} -> a:Type -> {|parseable_serializeable bytes a|} -> bytes_compatible_pre bytes -> a -> Type0
+let is_well_formed #bytes #bl a #ps pre x =
+  is_well_formed_exact ps.base pre x
 
-val parse_pre_lemma: #bytes:Type0 -> {|bytes_like bytes|} -> a:Type -> {|parseable_serializeable bytes a|} ->pre:bytes_compatible_pre bytes -> buf:bytes -> Lemma
+val parse_wf_lemma: #bytes:Type0 -> {|bytes_like bytes|} -> a:Type -> {|parseable_serializeable bytes a|} -> pre:bytes_compatible_pre bytes -> buf:bytes -> Lemma
   (requires pre buf)
   (ensures (
     match parse a buf with
-    | Some x -> is_valid a pre x
+    | Some x -> is_well_formed a pre x
     | None -> True
   ))
-let parse_pre_lemma #bytes #bl a #ps pre buf =
-  ps.base.parse_pre_exact pre buf
+let parse_wf_lemma #bytes #bl a #ps pre buf =
+  serialize_parse_inv_lemma a buf
 
-val serialize_pre_lemma: #bytes:Type0 -> {|bytes_like bytes|} -> a:Type -> {|parseable_serializeable bytes a|} ->pre:bytes_compatible_pre bytes -> x:a -> Lemma
-  (requires is_valid a pre x)
+val serialize_wf_lemma: #bytes:Type0 -> {|bytes_like bytes|} -> a:Type -> {|parseable_serializeable bytes a|} -> pre:bytes_compatible_pre bytes -> x:a -> Lemma
+  (requires is_well_formed a pre x)
   (ensures pre (serialize a x))
-let serialize_pre_lemma #bytes #bl a #ps pre x =
-  ps.base.serialize_pre_exact pre x
+let serialize_wf_lemma #bytes #bl a #ps pre x =
+  ()
+
+
+val wf_weaken_lemma: #bytes:Type0 -> {|bytes_like bytes|} -> a:Type -> {|parseable_serializeable bytes a|} -> pre_strong:bytes_compatible_pre bytes -> pre_weak:bytes_compatible_pre bytes -> x:a -> Lemma
+  (requires is_well_formed a pre_strong x /\ (forall b. pre_strong b ==> pre_weak b))
+  (ensures is_well_formed a pre_weak x)
+let wf_weaken_lemma #bytes #bl a #ps pre_strong pre_weak x =
+  ()
 
 val mk_parseable_serializeable_from_exact:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
