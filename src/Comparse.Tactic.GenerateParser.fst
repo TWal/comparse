@@ -321,20 +321,21 @@ irreducible let with_num_tag (n:nat) (x:nat_lbytes n) = ()
 
 val get_tag_from_ctor: ctor -> Tac (option (typ & term))
 let get_tag_from_ctor (ctor_name, ctor_typ) =
-  match inspect ctor_typ with
-  | Tv_Arrow b _ -> (
-    match find_annotation_in_binder b (`with_tag) with
-    | None -> (
-      match find_annotation_in_binder b (`with_num_tag) with
-      | None -> None
-      | Some [tag_sz; tag_val] -> Some (`(nat_lbytes (`#tag_sz)), tag_val)
-      | Some _ -> fail "get_tag_from_ctor: malformed annotation"
-    )
+  match lookup_typ (top_env ()) ctor_name with
+  | Some sigelt -> (
+    let attrs = sigelt_attrs sigelt in
+    match find_annotation_in_list attrs (`with_tag) with
     | Some [tag_typ; tag_val] ->
       Some (tag_typ, tag_val)
     | Some _ -> fail "get_tag_from_ctor: malformed annotation"
+    | None -> (
+      match find_annotation_in_list attrs (`with_num_tag) with
+      | Some [tag_sz; tag_val] -> Some (`(nat_lbytes (`#tag_sz)), tag_val)
+      | Some _ -> fail "get_tag_from_ctor: malformed annotation"
+      | None -> None
+    )
   )
-  | _ -> None
+  | None -> fail "get_tag_from_ctor: cannot find ctor type?"
 
 let rec find_nbytes (n:nat) (acc:nat): Tac nat =
   if n < pow2 (8 `op_Multiply` acc) then

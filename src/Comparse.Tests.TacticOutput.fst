@@ -324,10 +324,10 @@ let ps_simple_record_ok (): ML bool =
     })
 
 type sum_type_with_num_tag (bytes:Type0) {|bytes_like bytes|} =
-  | SumTypeWithNumTag_1: [@@@ with_num_tag 2 0X002A] unit -> sum_type_with_num_tag bytes
-  | SumTypeWithNumTag_2: [@@@ with_num_tag 2 0X0539] tls_bytes bytes ({min=0; max=255}) -> sum_type_with_num_tag bytes
-  | SumTypeWithNumTag_3: [@@@ with_num_tag 2 0X0FFF] tls_seq bytes (ps_nat_lbytes 2) ({min=0; max=255}) -> sum_type_with_num_tag bytes
-  | SumTypeWithNumTag_4: [@@@ with_num_tag 2 0XAAAA] nat_lbytes 8 -> sum_type_with_num_tag bytes
+  | [@@@ with_num_tag 2 0X002A] SumTypeWithNumTag_1: sum_type_with_num_tag bytes
+  | [@@@ with_num_tag 2 0X0539] SumTypeWithNumTag_2: tls_bytes bytes ({min=0; max=255}) -> sum_type_with_num_tag bytes
+  | [@@@ with_num_tag 2 0X0FFF] SumTypeWithNumTag_3: tls_seq bytes (ps_nat_lbytes 2) ({min=0; max=255}) -> sum_type_with_num_tag bytes
+  | [@@@ with_num_tag 2 0XAAAA] SumTypeWithNumTag_4: nat_lbytes 8 -> sum_type_with_num_tag bytes
 
 %splice [ps_sum_type_with_num_tag] (gen_parser (`sum_type_with_num_tag))
 
@@ -336,7 +336,7 @@ let ps_sum_type_with_num_tag_1 (): ML bool =
   parse_ok
     ps_sum_type_with_num_tag
     "002A"
-    (SumTypeWithNumTag_1 ())
+    SumTypeWithNumTag_1
 
 [@@ test]
 let ps_sum_type_with_num_tag_2 (): ML bool =
@@ -364,7 +364,7 @@ let ps_sum_type_with_num_tag_4 (): ML bool =
     (SumTypeWithNumTag_4 0x0123456789ABCDEF)
 
 type enum_singleton =
-  | EnumSingleton: [@@@ with_num_tag 4 0x12345678] unit -> enum_singleton
+  | [@@@ with_num_tag 4 0x12345678] EnumSingleton: enum_singleton
 
 %splice [ps_enum_singleton] (gen_parser (`enum_singleton))
 
@@ -373,13 +373,13 @@ let ps_enum_singleton_ok (): ML bool =
   parse_ok
     ps_enum_singleton
     "12345678"
-    (EnumSingleton ())
+    EnumSingleton
 
 type enum_multi =
-  | EnumMulti_1: [@@@ with_num_tag 4 0x12345678] unit -> enum_multi
-  | EnumMulti_2: [@@@ with_num_tag 4 0x87654321] unit -> enum_multi
-  | EnumMulti_3: [@@@ with_num_tag 4 0x10203040] unit -> enum_multi
-  | EnumMulti_4: [@@@ with_num_tag 4 0x50607080] unit -> enum_multi
+  | [@@@ with_num_tag 4 0x12345678] EnumMulti_1: enum_multi
+  | [@@@ with_num_tag 4 0x87654321] EnumMulti_2: enum_multi
+  | [@@@ with_num_tag 4 0x10203040] EnumMulti_3: enum_multi
+  | [@@@ with_num_tag 4 0x50607080] EnumMulti_4: enum_multi
 
 %splice [ps_enum_multi] (gen_parser (`enum_multi))
 
@@ -388,34 +388,34 @@ let ps_enum_multi_1 (): ML bool =
   parse_ok
     ps_enum_multi
     "12345678"
-    (EnumMulti_1 ())
+    EnumMulti_1
 
 [@@ test]
 let ps_enum_multi_2 (): ML bool =
   parse_ok
     ps_enum_multi
     "87654321"
-    (EnumMulti_2 ())
+    EnumMulti_2
 
 [@@ test]
 let ps_enum_multi_3 (): ML bool =
   parse_ok
     ps_enum_multi
     "10203040"
-    (EnumMulti_3 ())
+    EnumMulti_3
 
 [@@ test]
 let ps_enum_multi_4 (): ML bool =
   parse_ok
     ps_enum_multi
     "50607080"
-    (EnumMulti_4 ())
+    EnumMulti_4
 
 type sum_type_with_enum_tag (bytes:Type0) {|bytes_like bytes|} =
-  | SumTypeWithEnumTag_1: [@@@ with_tag (EnumMulti_1 ())] unit -> sum_type_with_enum_tag bytes
-  | SumTypeWithEnumTag_2: [@@@ with_tag (EnumMulti_2 ())] tls_bytes bytes ({min=0; max=255}) -> sum_type_with_enum_tag bytes
-  | SumTypeWithEnumTag_3: [@@@ with_tag (EnumMulti_3 ())] tls_seq bytes (ps_nat_lbytes 2) ({min=0; max=255}) -> sum_type_with_enum_tag bytes
-  | SumTypeWithEnumTag_4: [@@@ with_tag (EnumMulti_4 ())] nat_lbytes 8 -> sum_type_with_enum_tag bytes
+  | [@@@ with_tag EnumMulti_1] SumTypeWithEnumTag_1: sum_type_with_enum_tag bytes
+  | [@@@ with_tag EnumMulti_2] SumTypeWithEnumTag_2: tls_bytes bytes ({min=0; max=255}) -> sum_type_with_enum_tag bytes
+  | [@@@ with_tag EnumMulti_3] SumTypeWithEnumTag_3: tls_seq bytes (ps_nat_lbytes 2) ({min=0; max=255}) -> sum_type_with_enum_tag bytes
+  | [@@@ with_tag EnumMulti_4] SumTypeWithEnumTag_4: nat_lbytes 8 -> sum_type_with_enum_tag bytes
 
 %splice [ps_sum_type_with_enum_tag] (gen_parser (`sum_type_with_enum_tag))
 
@@ -424,7 +424,7 @@ let ps_sum_type_with_enum_tag_1 (): ML bool =
   parse_ok
     ps_sum_type_with_enum_tag
     "12345678"
-    (SumTypeWithEnumTag_1 ())
+    SumTypeWithEnumTag_1
 
 [@@ test]
 let ps_sum_type_with_enum_tag_2 (): ML bool =

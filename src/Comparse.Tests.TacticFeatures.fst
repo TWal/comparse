@@ -198,9 +198,9 @@ noeq type test_sum_no_annot (bytes:Type0) {|bytes_like bytes|} =
 #pop-options
 
 noeq type test_sum_num_annot (bytes:Type0) {|bytes_like bytes|} =
-  | TestSumNumAnnot_1: [@@@ with_tag #(nat_lbytes 4) 42] test_ni -> test_ei bytes -> test_sum_num_annot bytes
-  | TestSumNumAnnot_2: [@@@ with_tag #(nat_lbytes 4) 1337] test_ni -> test_sum_num_annot bytes
-  | TestSumNumAnnot_3: [@@@ with_tag #(nat_lbytes 4) 123456789] test_dep_nat_e bytes 256 -> test_ei bytes -> test_sum_num_annot bytes
+  | [@@@ with_tag #(nat_lbytes 4) 42] TestSumNumAnnot_1: test_ni -> test_ei bytes -> test_sum_num_annot bytes
+  | [@@@ with_tag #(nat_lbytes 4) 1337] TestSumNumAnnot_2: test_ni -> test_sum_num_annot bytes
+  | [@@@ with_tag #(nat_lbytes 4) 123456789] TestSumNumAnnot_3: test_dep_nat_e bytes 256 -> test_ei bytes -> test_sum_num_annot bytes
 
 #push-options "--fuel 0 --ifuel 1" // --print_implicits"
 %splice [ps_test_sum_num_annot] (gen_parser (`test_sum_num_annot))
@@ -215,9 +215,9 @@ noeq type test_sum_num_annot (bytes:Type0) {|bytes_like bytes|} =
 #pop-options
 
 noeq type test_sum_with_num_annot (bytes:Type0) {|bytes_like bytes|} =
-  | TestSumWithNumAnnot_1: [@@@ with_num_tag 4 42] test_ni -> test_ei bytes -> test_sum_with_num_annot bytes
-  | TestSumWithNumAnnot_2: [@@@ with_num_tag 4 1337] test_ni -> test_sum_with_num_annot bytes
-  | TestSumWithNumAnnot_3: [@@@ with_num_tag 4 123456789] test_dep_nat_e bytes 256 -> test_ei bytes -> test_sum_with_num_annot bytes
+  | [@@@ with_num_tag 4 42] TestSumWithNumAnnot_1: test_ni -> test_ei bytes -> test_sum_with_num_annot bytes
+  | [@@@ with_num_tag 4 1337] TestSumWithNumAnnot_2: test_ni -> test_sum_with_num_annot bytes
+  | [@@@ with_num_tag 4 123456789] TestSumWithNumAnnot_3: test_dep_nat_e bytes 256 -> test_ei bytes -> test_sum_with_num_annot bytes
 
 #push-options "--fuel 0 --ifuel 1" // --print_implicits"
 %splice [ps_test_sum_with_num_annot] (gen_parser (`test_sum_with_num_annot))
@@ -232,9 +232,9 @@ noeq type test_sum_with_num_annot (bytes:Type0) {|bytes_like bytes|} =
 #pop-options
 
 noeq type test_sum_simple_tag_annot (bytes:Type0) {|bytes_like bytes|} =
-  | TestSumSimpleTagAnnot_1: [@@@ with_tag TagSimple1] test_ni -> test_ei bytes -> test_sum_simple_tag_annot bytes
-  | TestSumSimpleTagAnnot_2: [@@@ with_tag TagSimple2] test_ni -> test_sum_simple_tag_annot bytes
-  | TestSumSimpleTagAnnot_3: [@@@ with_tag TagSimple3] test_dep_nat_e bytes 256 -> test_ei bytes -> test_sum_simple_tag_annot bytes
+  | [@@@ with_tag TagSimple1] TestSumSimpleTagAnnot_1: test_ni -> test_ei bytes -> test_sum_simple_tag_annot bytes
+  | [@@@ with_tag TagSimple2] TestSumSimpleTagAnnot_2: test_ni -> test_sum_simple_tag_annot bytes
+  | [@@@ with_tag TagSimple3] TestSumSimpleTagAnnot_3: test_dep_nat_e bytes 256 -> test_ei bytes -> test_sum_simple_tag_annot bytes
 
 #push-options "--fuel 0 --ifuel 1 --print_implicits"
 %splice [ps_test_sum_simple_tag_annot] (gen_parser (`test_sum_simple_tag_annot))
@@ -249,9 +249,9 @@ noeq type test_sum_simple_tag_annot (bytes:Type0) {|bytes_like bytes|} =
 #pop-options
 
 noeq type test_sum_unit_tag_annot (bytes:Type0) {|bytes_like bytes|} =
-  | TestSumUnitTagAnnot_1: [@@@ with_tag (TagUnit1 ())] test_ni -> test_ei bytes -> test_sum_unit_tag_annot bytes
-  | TestSumUnitTagAnnot_2: [@@@ with_tag (TagUnit2 ())] test_ni -> test_sum_unit_tag_annot bytes
-  | TestSumUnitTagAnnot_3: [@@@ with_tag (TagUnit3 ())] test_dep_nat_e bytes 256 -> test_ei bytes -> test_sum_unit_tag_annot bytes
+  | [@@@ with_tag (TagUnit1 ())] TestSumUnitTagAnnot_1: test_ni -> test_ei bytes -> test_sum_unit_tag_annot bytes
+  | [@@@ with_tag (TagUnit2 ())] TestSumUnitTagAnnot_2: test_ni -> test_sum_unit_tag_annot bytes
+  | [@@@ with_tag (TagUnit3 ())] TestSumUnitTagAnnot_3: test_dep_nat_e bytes 256 -> test_ei bytes -> test_sum_unit_tag_annot bytes
 
 #push-options "--fuel 0 --ifuel 1 --print_implicits"
 %splice [ps_test_sum_unit_tag_annot] (gen_parser (`test_sum_unit_tag_annot))
@@ -285,7 +285,7 @@ noeq type test_sum_dep (bytes:Type0) {|bytes_like bytes|} (n:nat) =
 
 // When there is a tag annotation, the meta-program should guess that it is a one-element enum.
 type test_one_element_enum_with_num_tag =
-  | TestOneElementEnumWithNumTag: [@@@ with_num_tag 1 1] unit -> test_one_element_enum_with_num_tag
+  | [@@@ with_num_tag 1 1] TestOneElementEnumWithNumTag: test_one_element_enum_with_num_tag
 
 #push-options "--fuel 0 --ifuel 1 --print_implicits"
 %splice [ps_test_one_element_enum_with_num_tag] (gen_parser (`test_one_element_enum_with_num_tag))
@@ -300,7 +300,7 @@ type test_one_element_enum_with_num_tag =
 #pop-options
 
 type test_one_element_enum_with_tag =
-  | TestOneElementEnumWithTag: [@@@ with_tag #(nat_lbytes 1) 1] unit -> test_one_element_enum_with_tag
+  | [@@@ with_tag #(nat_lbytes 1) 1] TestOneElementEnumWithTag: test_one_element_enum_with_tag
 
 #push-options "--fuel 0 --ifuel 1"
 %splice [ps_test_one_element_enum_with_tag] (gen_parser (`test_one_element_enum_with_tag))
