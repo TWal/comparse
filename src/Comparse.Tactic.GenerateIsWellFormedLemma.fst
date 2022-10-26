@@ -98,13 +98,13 @@ let simplify_is_well_formed_lemma () =
     let (ps_term, x_term) =
       match inspect (cur_goal()) with
       | Tv_App hd (p, Q_Explicit) -> (
-        guard (hd `term_eq` (`squash));
+        guard (hd `term_fv_eq` (`squash));
         match collect_app p with
         | (eq_term, [lhs, Q_Explicit; rhs, Q_Explicit]) -> (
-          guard (eq_term `term_eq` (`(<==>)));
+          guard (eq_term `term_fv_eq` (`(<==>)));
           let (is_well_formed_term, args) = collect_app lhs in
           guard (List.Tot.length args = 6);
-          guard (is_well_formed_term `term_eq` (`is_well_formed_partial));
+          guard (is_well_formed_term `term_fv_eq` (`is_well_formed_partial));
           (fst (List.Tot.index args 3), fst (List.Tot.index args 5))
         )
         | _ -> fail "goal is not an equiv?"
@@ -120,10 +120,11 @@ let simplify_is_well_formed_lemma () =
     norm [delta_only [ps_qn]];
     let ctrl_with (what:term) (t:term): Tac (bool & ctrl_flag) =
       let (hd, args) = collect_app t in
-      if hd `term_eq` (`is_well_formed_partial) && List.Tot.length args = 6 then (
+      let hd_ok = hd `term_fv_eq` (`is_well_formed_partial) in
+      if hd_ok && List.Tot.length args = 6 then (
         let ps_term = List.Tot.index args 3 in
         let (ps_unapplied_term, _) = collect_app (fst ps_term) in
-        (ps_unapplied_term `term_eq` what, Continue)
+        (ps_unapplied_term `term_fv_eq` what, Continue)
       ) else (
         (false, Continue)
       )

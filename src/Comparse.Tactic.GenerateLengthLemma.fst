@@ -124,16 +124,16 @@ let simplify_length_lemma () =
     let (ps_term, x_term) =
       match inspect (cur_goal()) with
       | Tv_App hd (p, Q_Explicit) -> (
-        guard (hd `term_eq` (`squash));
+        guard (hd `term_fv_eq` (`squash));
         match collect_app p with
         | (eq_term, [_, Q_Implicit; lhs, Q_Explicit; rhs, Q_Explicit]) -> (
-          guard (eq_term `term_eq` (`(==)));
+          guard (eq_term `term_fv_eq` (`(==)));
           let (prefixes_length_term, prefixes_length_args) = collect_app lhs in
           guard (List.Tot.length prefixes_length_args = 3);
-          guard (prefixes_length_term `term_eq` (`prefixes_length));
+          guard (prefixes_length_term `term_fv_eq` (`prefixes_length));
           let (serialize_term, serialize_args) = collect_app (fst (List.Tot.index prefixes_length_args 2)) in
           guard (List.Tot.length serialize_args = 5);
-          guard (serialize_term `term_eq` (`Mkparser_serializer_unit?.serialize));
+          guard (serialize_term `term_fv_eq` (`Mkparser_serializer_unit?.serialize));
           (fst (List.Tot.index serialize_args 3), fst (List.Tot.index serialize_args 4))
         )
         | _ -> fail "goal is not an equality?"
@@ -150,12 +150,14 @@ let simplify_length_lemma () =
 
     let ctrl_with (what:term) (t:term): Tac (bool & ctrl_flag) =
       let (hd, args) = collect_app t in
-      if hd `term_eq` (`prefixes_length) && List.Tot.length args = 3 then (
+      let hd_ok = hd `term_fv_eq` (`prefixes_length) in
+      if hd_ok && List.Tot.length args = 3 then (
         let (hd2, args2) = collect_app (fst (List.Tot.index args 2)) in
-        if hd2 `term_eq` (`Mkparser_serializer_unit?.serialize) && List.Tot.length args2 = 5 then (
+        let hd2_ok = hd2 `term_fv_eq` (`Mkparser_serializer_unit?.serialize) in
+        if hd2_ok && List.Tot.length args2 = 5 then (
             let ps_term = List.Tot.index args2 3 in
             let (ps_unapplied_term, _) = collect_app (fst ps_term) in
-            (ps_unapplied_term `term_eq` what, Continue)
+            (ps_unapplied_term `term_fv_eq` what, Continue)
         ) else (
             (false, Continue)
         )

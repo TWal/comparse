@@ -30,6 +30,19 @@ let rec apply_binders t bs =
   | [] -> t
   | bs_head::bs_tail -> apply_binders (apply_binder t bs_head) bs_tail
 
+val term_to_fv: term -> Tac (option fv)
+let term_to_fv t =
+  match inspect t with
+  | Tv_FVar fv -> Some fv
+  | Tv_UInst fv _ -> Some fv
+  | _ -> None
+
+val term_fv_eq: term -> term -> Tac bool
+let term_fv_eq t1 t2 =
+  match term_to_fv t1, term_to_fv t2 with
+  | Some fv1, Some fv2 -> term_eq (pack (Tv_FVar fv1)) (pack (Tv_FVar fv2)) // inspect_fv fv1 = inspect_fv fv2
+  | _, _ -> false
+
 // `l_to_r` is so slow!
 val l_to_r_breq: list term -> Tac unit
 let l_to_r_breq l =
@@ -42,9 +55,9 @@ let l_to_r_breq l =
   let x_term =
     match inspect squashed_equality_ty with
     | Tv_App squash_term (equality_term, Q_Explicit) -> (
-      guard (squash_term `term_eq` (`squash));
+      guard (squash_term `term_fv_eq` (`squash));
       let eq2_term, args = collect_app equality_term in
-      guard (eq2_term `term_eq` (`eq2));
+      guard (eq2_term `term_fv_eq` (`eq2));
       guard (List.Tot.length args = 3);
       let [_; (x_term, _); _] = args in
       guard (Tv_Var? (inspect x_term));
