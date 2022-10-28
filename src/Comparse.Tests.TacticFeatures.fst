@@ -144,6 +144,29 @@ noeq type test_with_parser (bytes:Type0) {|bytes_like bytes|} (n:nat) = {
 %splice [ps_test_with_parser_length] (gen_length_lemma (`test_with_parser))
 #pop-options
 
+assume val nat_func_1: nat -> nat
+assume val nat_func_2: nat -> nat
+assume val nat_func_3: nat -> nat
+assume val nat_func_4: nat -> nat
+assume val nat_pred_1: nat -> bool
+
+val test_match_parser: bytes:Type0 -> {|bytes_like bytes|} -> n:nat -> Type0
+let test_match_parser bytes #bl n =
+  let n2 = nat_func_1 n in
+  match nat_func_2 (nat_func_3 n) with
+  | 0 -> test_ni
+  | 1 -> test_ne
+  | 2 -> test_ii #bytes
+  | 3 -> test_ie #bytes
+  | 4 -> test_ei bytes
+  | 5 -> test_ee bytes
+  | 6 -> if nat_pred_1 n2 then test_dep_nat_n n2 else test_dep_nat_e bytes (n2+42)
+  | _ -> test_dep_nat_i #bytes (nat_func_4 n2)
+
+#push-options "--fuel 0 --ifuel 0"
+%splice [ps_test_match_parser] (gen_parser (`test_match_parser))
+#pop-options
+
 type test_tag_unit =
   | TagUnit1: unit -> test_tag_unit
   | TagUnit2: unit -> test_tag_unit

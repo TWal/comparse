@@ -561,6 +561,33 @@ let mk_sum_type_parser bi ctors result_type =
   let (middle_sum_type_parser_term, tag_to_pair_typ) = mk_middle_sum_type_parser bi tag_parser_term tag_vals ctors in
   mk_sum_isomorphism bi tag_typ result_type tag_to_pair_typ tag_vals ctors middle_sum_type_parser_term
 
+(*** Parser for computed type ***)
+
+val substitute_parser_in_term: bytes_impl -> term -> Tac term
+let rec substitute_parser_in_term bi t =
+  match inspect t with
+  | Tv_Match scrutinee ret branches ->
+    let new_branches = Tactics.Util.map
+      (fun (pat, br_term) -> (pat, substitute_parser_in_term bi br_term))
+      branches
+    in
+    pack (Tv_Match scrutinee ret new_branches)
+  | Tv_Let recf attrs bv def body ->
+    pack (Tv_Let recf attrs bv def (substitute_parser_in_term bi body))
+  // Remove type ascription because sometimes F* gives us (...) <: Type0
+  | Tv_AscribedC e c tac use_eq -> substitute_parser_in_term bi e
+  | Tv_AscribedT e t tac use_eq -> substitute_parser_in_term bi e
+  | Tv_App _ _
+  | Tv_FVar _
+  | Tv_UInst _ _ -> (
+    fst (parser_from_type bi t)
+  )
+  | _ -> (
+    dump (term_to_string t);
+    dump (term_to_ast_string t);
+    fail "substitute_parser_in_term: term not handled by the metaprogram"
+  )
+
 (*** Parser generator ***)
 
 val get_bytes_impl_and_parser_params: list binder -> Tac (bytes_impl & list binder)
@@ -601,42 +628,53 @@ let is_tagged_type constructors =
     true
   )
 
-val gen_parser_fun: term -> Tac (typ & term)
+val gen_parser_fun: term -> Tac (typ & term & bool)
 let gen_parser_fun type_fv =
   let env = top_env () in
   let type_name = get_name_from_fv type_fv in
   let type_declaration =
-  match lookup_typ env type_name with
-  | Some x -> x
-  | None -> fail "Type not found?"
+    match lookup_typ env type_name with
+    | Some x -> x
+    | None -> fail "Type not found?"
   in
-  match inspect_sigelt type_declaration with
-  | Sg_Inductive name [] params typ constructors -> (
-    guard (term_eq typ (`Type0) || term_eq typ (`eqtype)); //TODO this is a bit hacky
-    let (bi, parser_params) = get_bytes_impl_and_parser_params params in
-    let (bytes_term, bytes_like_term) = bi in
-    let result_parsed_type = apply_binders type_fv params in
-    let (parser_fun_body, _) =
-      if is_tagged_type constructors then (
-        mk_sum_type_parser bi constructors result_parsed_type
-      ) else (
-        guard (Cons? constructors);
-        mk_record_parser bi (Cons?.hd constructors) result_parsed_type
-      )
-    in
-    let parser_fun = mk_abs parser_params parser_fun_body in
-    let unparametrized_parser_type = mk_app (`parser_serializer) [bytes_term, Q_Explicit; bytes_like_term, Q_Implicit; result_parsed_type, Q_Explicit] in
-    let parser_type = mk_arr parser_params (pack_comp (C_Total unparametrized_parser_type u_unk [])) in
-    (parser_type, parser_fun)
-  )
-  | Sg_Inductive _ _ _ _ _ -> fail "gen_parser_fun: higher order types are not supported"
-  | _ -> fail "gen_parser_fun: only inductives are supported"
+  let (bi, result_parsed_type, parser_params, parser_fun_body, is_opaque) =
+    match inspect_sigelt type_declaration with
+    | Sg_Inductive name [] params typ constructors -> (
+      guard (term_eq typ (`Type0) || term_eq typ (`eqtype)); //TODO this is a bit hacky
+      let (bi, parser_params) = get_bytes_impl_and_parser_params params in
+      let result_parsed_type = apply_binders type_fv params in
+      let (parser_fun_body, _) =
+        if is_tagged_type constructors then (
+          mk_sum_type_parser bi constructors result_parsed_type
+        ) else (
+          guard (Cons? constructors);
+          mk_record_parser bi (Cons?.hd constructors) result_parsed_type
+        )
+      in
+      (bi, result_parsed_type, parser_params, parser_fun_body, true)
+    )
+    | Sg_Inductive _ _ _ _ _ -> fail "gen_parser_fun: higher order types are not supported"
+    | Sg_Let false [lb] -> (
+      let (params, body) = collect_abs (inspect_lb lb).lb_def in
+      let (bi, parser_params) = get_bytes_impl_and_parser_params params in
+      let result_parsed_type = apply_binders type_fv params in
+      let parser_fun_body = substitute_parser_in_term bi body in
+      (bi, result_parsed_type, parser_params, parser_fun_body, false)
+    )
+    | Sg_Let _ _ -> fail "gen_parser_fun: recursive lets are not supported"
+    | _ -> fail "gen_parser_fun: only inductives are supported"
+  in
+  let parser_fun = mk_abs parser_params parser_fun_body in
+  let (bytes_term, bytes_like_term) = bi in
+  let unparametrized_parser_type = mk_app (`parser_serializer) [bytes_term, Q_Explicit; bytes_like_term, Q_Implicit; result_parsed_type, Q_Explicit] in
+  let parser_type = mk_arr parser_params (pack_comp (C_Total unparametrized_parser_type u_unk [])) in
+  (parser_type, parser_fun, is_opaque)
 
 val gen_parser: term -> Tac decls
 let gen_parser type_fv =
   let type_name = get_name_from_fv type_fv in
   let parser_name = List.Tot.snoc (moduleof (top_env ()), "ps_" ^ (last type_name)) in
-  let (parser_type, parser_fun) = gen_parser_fun type_fv in
+  let (parser_type, parser_fun, is_opaque) = gen_parser_fun type_fv in
   //dump (term_to_string parser_fun);
   //dump (term_to_string parser_type);
   let parser_letbinding = pack_lb ({
@@ -646,5 +684,8 @@ let gen_parser type_fv =
     lb_def = parser_fun;
   }) in
   let sv = pack_sigelt (Sg_Let false [parser_letbinding]) in
-  let sv = set_sigelt_attrs [(`"opaque_to_smt")] sv in
+  let sv =
+    if is_opaque then set_sigelt_attrs [(`"opaque_to_smt")] sv
+    else sv
+  in
   [sv]
