@@ -35,7 +35,7 @@ let mk_lemma_type_ensures bi ps_term x_term ctors =
       )
     in
     let term_to_length (ps_t:term) (t:term) =
-      (`(prefixes_length (Mkparser_serializer_unit?.serialize (`#ps_t) (`#t))))
+      (`(prefixes_length (Mkparser_serializer_prefix?.serialize (`#ps_t) (`#t))))
     in
     let binder_to_length (b:binder) =
       let (ps_b, _) = GenerateParser.parser_from_binder bi b in
@@ -60,13 +60,13 @@ let mk_lemma_type_ensures bi ps_term x_term ctors =
     in
     (branch_pattern, branch_term)
   in
-  let lhs = `(prefixes_length (Mkparser_serializer_unit?.serialize (`#ps_term) (`#x_term))) in
+  let lhs = `(prefixes_length (Mkparser_serializer_prefix?.serialize (`#ps_term) (`#x_term))) in
   let rhs = pack (Tv_Match x_term None (map2 ctor_to_branch ctors tag_opt_vals)) in
   `((`#lhs) == (`#rhs))
 
 val mk_lemma_type_smtpat: term -> term -> Tac term
 let mk_lemma_type_smtpat ps_term x_term =
-  `(prefixes_length (Mkparser_serializer_unit?.serialize (`#ps_term) (`#x_term)))
+  `(prefixes_length (Mkparser_serializer_prefix?.serialize (`#ps_term) (`#x_term)))
 
 val mk_lemma_type: term -> list binder -> list ctor -> Tac term
 let mk_lemma_type type_unapplied params ctors =
@@ -89,7 +89,7 @@ let mk_lemma_type type_unapplied params ctors =
 
 val my_isomorphism_length_with_id:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:Type ->
-  ps_a:parser_serializer_unit bytes a ->
+  ps_a:parser_serializer_prefix bytes a ->
   a_to_b:(a -> b) -> b_to_a:(b -> a) ->
   a_to_b_to_a:(x:a -> squash (b_to_a (a_to_b x) == x)) ->
   b_to_a_to_b:(x:b -> squash (a_to_b (b_to_a x) == x)) ->
@@ -100,7 +100,7 @@ let my_isomorphism_length_with_id #bytes #bl #a #b ps_a a_to_b b_to_a a_to_b_to_
 
 val my_isomorphism_length:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:Type ->
-  ps_a:parser_serializer_unit bytes a ->
+  ps_a:parser_serializer_prefix bytes a ->
   a_to_b:(a -> b) -> b_to_a:(b -> a) ->
   a_to_b_to_a:(x:a -> squash (b_to_a (a_to_b x) == x)) ->
   b_to_a_to_b:(x:b -> squash (a_to_b (b_to_a x) == x)) ->
@@ -133,7 +133,7 @@ let simplify_length_lemma () =
           guard (prefixes_length_term `term_fv_eq` (`prefixes_length));
           let (serialize_term, serialize_args) = collect_app (fst (List.Tot.index prefixes_length_args 2)) in
           guard (List.Tot.length serialize_args = 5);
-          guard (serialize_term `term_fv_eq` (`Mkparser_serializer_unit?.serialize));
+          guard (serialize_term `term_fv_eq` (`Mkparser_serializer_prefix?.serialize));
           (fst (List.Tot.index serialize_args 3), fst (List.Tot.index serialize_args 4))
         )
         | _ -> fail "goal is not an equality?"
@@ -153,7 +153,7 @@ let simplify_length_lemma () =
       let hd_ok = hd `term_fv_eq` (`prefixes_length) in
       if hd_ok && List.Tot.length args = 3 then (
         let (hd2, args2) = collect_app (fst (List.Tot.index args 2)) in
-        let hd2_ok = hd2 `term_fv_eq` (`Mkparser_serializer_unit?.serialize) in
+        let hd2_ok = hd2 `term_fv_eq` (`Mkparser_serializer_prefix?.serialize) in
         if hd2_ok && List.Tot.length args2 = 5 then (
             let ps_term = List.Tot.index args2 3 in
             let (ps_unapplied_term, _) = collect_app (fst ps_term) in

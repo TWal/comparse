@@ -21,7 +21,7 @@ val add_prefixes: #bytes:Type0 -> {|bytes_like bytes|} -> list (bytes) -> bytes 
 val prefixes_length: #bytes:Type0 -> {|bytes_like bytes|} -> list (bytes) -> nat
 
 /// The following structure defines composable parsers / serializer.
-/// For a structure that is meant to actually be used by the user, see `parser_serializer_exact`.
+/// For a structure that is meant to actually be used by the user, see `parser_serializer_whole`.
 ///
 /// The parser takes as input a `bytes`, and returns an `option` (it can fail on malformed inputs) of an `a` (the parsed value) and a `bytes` (the suffix of the input that was not parsed).
 /// The serializer takes as input an `a`, and returns a list of `bytes`, that you need to concatenate with `add_prefixes`.
@@ -82,7 +82,7 @@ val prefixes_length: #bytes:Type0 -> {|bytes_like bytes|} -> list (bytes) -> nat
 ///
 /// The parser and serializer are inverse of each other, as stated by the `..._inv` lemmas.
 
-noeq type parser_serializer_unit (bytes:Type0) {|bytes_like bytes|} (a:Type) = {
+noeq type parser_serializer_prefix (bytes:Type0) {|bytes_like bytes|} (a:Type) = {
   parse: bytes -> option (a & bytes);
   serialize: a -> list bytes;
   parse_serialize_inv: x:a -> suffix:bytes -> Lemma (
@@ -99,20 +99,20 @@ noeq type parser_serializer_unit (bytes:Type0) {|bytes_like bytes|} (a:Type) = {
 /// given a predicate on `bytes` compatible with `concat` and `slice`, you get a predicate on `a`,
 /// which says whether the bytes predicate is valid on all the bytes contained inside `a`.
 
-let is_well_formed_partial (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer_unit bytes a) (pre:bytes_compatible_pre bytes) (x:a) =
+let is_well_formed_prefix (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer_prefix bytes a) (pre:bytes_compatible_pre bytes) (x:a) =
   for_allP pre (ps_a.serialize x)
 
-val is_well_formed_partial_weaken:
+val is_well_formed_prefix_weaken:
   #bytes:Type0 -> {|bytes_like bytes|} ->
-  #a:Type -> ps_a:parser_serializer_unit bytes a ->
+  #a:Type -> ps_a:parser_serializer_prefix bytes a ->
   pre_strong:bytes_compatible_pre bytes -> pre_weak:bytes_compatible_pre bytes ->
   x:a ->
   Lemma
-  (requires is_well_formed_partial ps_a pre_strong x /\ (forall b. pre_strong b ==> pre_weak b))
-  (ensures is_well_formed_partial ps_a pre_weak x)
+  (requires is_well_formed_prefix ps_a pre_strong x /\ (forall b. pre_strong b ==> pre_weak b))
+  (ensures is_well_formed_prefix ps_a pre_weak x)
 
-/// What is the reason behind `parser_serializer_unit` and `parser_serializer`?
-/// In some functions (such as `pse_list` which is used to build `ps_seq` or `ps_bytes`),
+/// What is the reason behind `parser_serializer_prefix` and `parser_serializer`?
+/// In some functions (such as `ps_whole_list` which is used to build `ps_seq` or `ps_bytes`),
 /// it is useful to know that `parse` will never consume 0 bytes, and `serialize` will never return `bytes_empty`.
 /// Such types only have one element, hence are isomorphic to `unit`. They are (anti-)recognized by the `is_not_unit` predicate.
 /// Thus they depend on a `parser_serializer` which doesn't serialize/parse a unit type.
@@ -125,12 +125,12 @@ val is_well_formed_partial_weaken:
 ///       }
 ///   } optional<T>;
 /// In this interface, we tried to use `parser_serializer` for return types when possible,
-/// and to use `parser_serializer_unit` for argument types when possible.
-/// They are named `parser_serializer_unit` / `parser_serializer` and not `parser_serializer` / `parser_serializer_nonempty`
-/// because `parser_serializer_nonempty` is ugly, and it's the type that is the most used by the user.
+/// and to use `parser_serializer_prefix` for argument types when possible.
+/// The type `parser_serializer` will be the one most often used by the user,
+/// hence this nice name instead of something like `parser_serializer_prefix_not_unit`
 
-val is_not_unit: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:parser_serializer_unit bytes a -> Type0
-let parser_serializer (bytes:Type0) {|bytes_like bytes|} (a:Type) = ps_a:parser_serializer_unit bytes a{is_not_unit ps_a}
+val is_not_unit: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:parser_serializer_prefix bytes a -> Type0
+let parser_serializer (bytes:Type0) {|bytes_like bytes|} (a:Type) = ps_a:parser_serializer_prefix bytes a{is_not_unit ps_a}
 
 (*** Parser combinators ***)
 
@@ -138,7 +138,7 @@ let parser_serializer (bytes:Type0) {|bytes_like bytes|} (a:Type) = ps_a:parser_
 /// It can be used both to parse (non-dependant pairs), hence records,
 /// or tagged-union-like structures (the second value depend on the tag), hence sum types.
 
-val bind: #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:(a -> Type) -> ps_a:parser_serializer_unit bytes a -> ps_b:(xa:a -> parser_serializer_unit bytes (b xa)) -> parser_serializer_unit bytes (dtuple2 a b)
+val bind: #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:(a -> Type) -> ps_a:parser_serializer_prefix bytes a -> ps_b:(xa:a -> parser_serializer_prefix bytes (b xa)) -> parser_serializer_prefix bytes (dtuple2 a b)
 
 /// On concrete bytes we actually have an equivalence between the `requires` and the `ensures`.
 /// On symbolic bytes where you may have multiple bytes of length 0, this is not true anymore.
@@ -146,7 +146,7 @@ val bind: #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:(a -> Type) ->
 /// the other would be useful to prove that a predicate do parse the unit type,
 /// and this is not something we actually need.
 
-val bind_is_not_unit: #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:(a -> Type) -> ps_a:parser_serializer_unit bytes a -> ps_b:(xa:a -> parser_serializer_unit bytes (b xa)) -> Lemma
+val bind_is_not_unit: #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:(a -> Type) -> ps_a:parser_serializer_prefix bytes a -> ps_b:(xa:a -> parser_serializer_prefix bytes (b xa)) -> Lemma
   (requires is_not_unit ps_a \/ (forall xa. is_not_unit (ps_b xa)))
   (ensures is_not_unit (bind ps_a ps_b))
   [SMTPat (is_not_unit (bind ps_a ps_b))]
@@ -157,16 +157,16 @@ val bind_is_not_unit: #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:(a
 // https://stackoverflow.com/questions/13198158/proving-inductive-facts-in-z3
 val bind_is_well_formed:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:(a -> Type) ->
-  ps_a:parser_serializer_unit bytes a -> ps_b:(xa:a -> parser_serializer_unit bytes (b xa)) ->
+  ps_a:parser_serializer_prefix bytes a -> ps_b:(xa:a -> parser_serializer_prefix bytes (b xa)) ->
   pre:bytes_compatible_pre bytes -> xa:a -> xb:(b xa) ->
-  Lemma (is_well_formed_partial (bind ps_a ps_b) pre (|xa, xb|) <==> is_well_formed_partial ps_a pre xa /\ is_well_formed_partial (ps_b xa) pre xb)
-  [SMTPat (is_well_formed_partial (bind ps_a ps_b) pre (|xa, xb|))]
+  Lemma (is_well_formed_prefix (bind ps_a ps_b) pre (|xa, xb|) <==> is_well_formed_prefix ps_a pre xa /\ is_well_formed_prefix (ps_b xa) pre xb)
+  [SMTPat (is_well_formed_prefix (bind ps_a ps_b) pre (|xa, xb|))]
 
 // We use `eq2` intsead of `==` because otherwise the inferred type is `int` and not `nat`.
 // This is useful for Comparse.Tactic.GenerateLengthLemma meta-program.
 val bind_length:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:(a -> Type) ->
-  ps_a:parser_serializer_unit bytes a -> ps_b:(xa:a -> parser_serializer_unit bytes (b xa)) ->
+  ps_a:parser_serializer_prefix bytes a -> ps_b:(xa:a -> parser_serializer_prefix bytes (b xa)) ->
   xa:a -> xb:b xa ->
   Lemma (eq2 #nat (prefixes_length ((bind ps_a ps_b).serialize (|xa, xb|))) ((prefixes_length (ps_a.serialize xa)) + (prefixes_length ((ps_b xa).serialize xb))))
   [SMTPat (prefixes_length ((bind ps_a ps_b).serialize (|xa, xb|)))]
@@ -193,16 +193,16 @@ let mk_isomorphism_between (#a:Type) (#b:Type) (a_to_b:a -> b) (b_to_a:b -> a):
 /// then use the `isomorphism` transformer to derive a parser for your actual type.
 val isomorphism:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:Type ->
-  ps_a:parser_serializer_unit bytes a -> iso:isomorphism_between a b ->
-  parser_serializer_unit bytes b
+  ps_a:parser_serializer_prefix bytes a -> iso:isomorphism_between a b ->
+  parser_serializer_prefix bytes b
 
 /// This helper function is extremely valuable to help F*'s type inference.
 /// Using it, F* is able to automatically deduce the type of `a`, which is often ugly.
 /// (This is in general why you use `isomorphism`: because you want to replace the ugly `a` with a nicer `b`)
 let mk_isomorphism
   (#bytes:Type0) {| bytes_like bytes |} (#a:Type) (b:Type)
-  (ps_a:parser_serializer_unit bytes a) (a_to_b:a -> b) (b_to_a:b -> a):
-  Pure (parser_serializer_unit bytes b)
+  (ps_a:parser_serializer_prefix bytes a) (a_to_b:a -> b) (b_to_a:b -> a):
+  Pure (parser_serializer_prefix bytes b)
     (requires (forall x. a_to_b (b_to_a x) == x) /\ (forall x. b_to_a (a_to_b x) == x))
     (ensures fun _ -> True)
   =
@@ -210,8 +210,8 @@ let mk_isomorphism
 
 let mk_trivial_isomorphism
   (#bytes:Type0) {| bytes_like bytes |} (#a:Type) (#b:Type)
-  (ps_a:parser_serializer_unit bytes a):
-  Pure (parser_serializer_unit bytes b)
+  (ps_a:parser_serializer_prefix bytes a):
+  Pure (parser_serializer_prefix bytes b)
     (requires a `subtype_of` b /\ b `subtype_of` a)
     (ensures fun _ -> True)
   =
@@ -220,7 +220,7 @@ let mk_trivial_isomorphism
 /// This type we have the equivalence even with symbolic bytes, but we don't need it so we can keep a consistent interface.
 val isomorphism_is_not_unit:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:Type ->
-  ps_a:parser_serializer_unit bytes a -> iso:isomorphism_between a b ->
+  ps_a:parser_serializer_prefix bytes a -> iso:isomorphism_between a b ->
   Lemma
     (requires is_not_unit ps_a)
     (ensures is_not_unit (isomorphism ps_a iso))
@@ -228,15 +228,15 @@ val isomorphism_is_not_unit:
 
 val isomorphism_is_well_formed:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:Type ->
-  ps_a:parser_serializer_unit bytes a -> iso:isomorphism_between a b ->
+  ps_a:parser_serializer_prefix bytes a -> iso:isomorphism_between a b ->
   pre:bytes_compatible_pre bytes -> xb:b ->
   Lemma
-  (is_well_formed_partial (isomorphism ps_a iso) pre xb <==> is_well_formed_partial ps_a pre (iso.b_to_a xb))
-  [SMTPat (is_well_formed_partial (isomorphism ps_a iso) pre xb)]
+  (is_well_formed_prefix (isomorphism ps_a iso) pre xb <==> is_well_formed_prefix ps_a pre (iso.b_to_a xb))
+  [SMTPat (is_well_formed_prefix (isomorphism ps_a iso) pre xb)]
 
 val isomorphism_length:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:Type ->
-  ps_a:parser_serializer_unit bytes a -> iso:isomorphism_between a b ->
+  ps_a:parser_serializer_prefix bytes a -> iso:isomorphism_between a b ->
   xb:b ->
   Lemma (prefixes_length ((isomorphism ps_a iso).serialize xb) == prefixes_length (ps_a.serialize (iso.b_to_a xb)))
   [SMTPat (prefixes_length ((isomorphism ps_a iso).serialize xb))]
@@ -249,11 +249,11 @@ type refined (a:Type) (pred:a -> bool) = x:a{pred x}
 /// Parser for a refinement.
 val refine:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type ->
-  parser_serializer_unit bytes a -> pred:(a -> bool) -> parser_serializer_unit bytes (refined a pred)
+  parser_serializer_prefix bytes a -> pred:(a -> bool) -> parser_serializer_prefix bytes (refined a pred)
 
 val refine_is_not_unit:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type ->
-  ps_a:parser_serializer_unit bytes a -> pred:(a -> bool) ->
+  ps_a:parser_serializer_prefix bytes a -> pred:(a -> bool) ->
   Lemma
     (requires is_not_unit ps_a)
     (ensures is_not_unit (refine ps_a pred))
@@ -261,14 +261,14 @@ val refine_is_not_unit:
 
 val refine_is_well_formed:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type ->
-  ps_a:parser_serializer_unit bytes a -> pred:(a -> bool) ->
+  ps_a:parser_serializer_prefix bytes a -> pred:(a -> bool) ->
   pre:bytes_compatible_pre bytes -> x:a{pred x} ->
-  Lemma (is_well_formed_partial (refine ps_a pred) pre x <==> is_well_formed_partial ps_a pre x)
-  [SMTPat (is_well_formed_partial (refine ps_a pred) pre x)]
+  Lemma (is_well_formed_prefix (refine ps_a pred) pre x <==> is_well_formed_prefix ps_a pre x)
+  [SMTPat (is_well_formed_prefix (refine ps_a pred) pre x)]
 
 val refine_length:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type ->
-  ps_a:parser_serializer_unit bytes a -> pred:(a -> bool) ->
+  ps_a:parser_serializer_prefix bytes a -> pred:(a -> bool) ->
   x:a{pred x} ->
   Lemma (prefixes_length ((refine ps_a pred).serialize x) == prefixes_length (ps_a.serialize x))
   [SMTPat (prefixes_length ((refine ps_a pred).serialize x))]
@@ -276,13 +276,13 @@ val refine_length:
 (*** Parser for basic types ***)
 
 [@@is_parser; is_parser_for (`%unit)]
-val ps_unit: #bytes:Type0 -> {| bytes_like bytes |} -> parser_serializer_unit bytes unit
+val ps_unit: #bytes:Type0 -> {| bytes_like bytes |} -> parser_serializer_prefix bytes unit
 
 val ps_unit_is_well_formed:
   #bytes:Type0 -> {| bl:bytes_like bytes |} ->
   pre:bytes_compatible_pre bytes -> x:unit ->
-  Lemma (is_well_formed_partial (ps_unit #bytes #bl) pre x <==> True)
-  [SMTPat (is_well_formed_partial (ps_unit #bytes #bl) pre x)]
+  Lemma (is_well_formed_prefix (ps_unit #bytes #bl) pre x <==> True)
+  [SMTPat (is_well_formed_prefix (ps_unit #bytes #bl) pre x)]
 
 val ps_unit_length:
   #bytes:Type0 -> {| bl:bytes_like bytes |} ->
@@ -291,7 +291,7 @@ val ps_unit_length:
   [SMTPat (prefixes_length ((ps_unit #bytes #bl).serialize x))]
 
 type lbytes (bytes:Type0) {|bytes_like bytes|} (n:nat) = b:bytes{length b == n}
-val ps_lbytes: #bytes:Type0 -> {| bytes_like bytes |} -> n:nat -> parser_serializer_unit bytes (lbytes bytes n)
+val ps_lbytes: #bytes:Type0 -> {| bytes_like bytes |} -> n:nat -> parser_serializer_prefix bytes (lbytes bytes n)
 
 val ps_lbytes_is_not_unit:
   #bytes:Type0 -> {| bl:bytes_like bytes |} -> n:nat ->
@@ -303,8 +303,8 @@ val ps_lbytes_is_not_unit:
 val ps_lbytes_is_well_formed:
   #bytes:Type0 -> {| bytes_like bytes |} -> n:nat ->
   pre:bytes_compatible_pre bytes -> x:lbytes bytes n ->
-  Lemma (is_well_formed_partial (ps_lbytes n) pre x <==> pre (x <: bytes))
-  [SMTPat (is_well_formed_partial (ps_lbytes n) pre x)]
+  Lemma (is_well_formed_prefix (ps_lbytes n) pre x <==> pre (x <: bytes))
+  [SMTPat (is_well_formed_prefix (ps_lbytes n) pre x)]
 
 val ps_lbytes_length:
   #bytes:Type0 -> {| bytes_like bytes |} -> n:nat ->
@@ -313,7 +313,7 @@ val ps_lbytes_length:
   [SMTPat (prefixes_length ((ps_lbytes n).serialize x))]
 
 [@@is_parser; is_parser_for (`%nat_lbytes)]
-val ps_nat_lbytes: #bytes:Type0 -> {|bytes_like bytes|} -> sz:nat -> parser_serializer_unit bytes (nat_lbytes sz)
+val ps_nat_lbytes: #bytes:Type0 -> {|bytes_like bytes|} -> sz:nat -> parser_serializer_prefix bytes (nat_lbytes sz)
 
 val ps_nat_lbytes_is_not_unit:
   #bytes:Type0 -> {| bl:bytes_like bytes |} -> n:nat ->
@@ -325,8 +325,8 @@ val ps_nat_lbytes_is_not_unit:
 val ps_nat_lbytes_is_well_formed:
   #bytes:Type0 -> {| bytes_like bytes |} -> sz:nat ->
   pre:bytes_compatible_pre bytes -> x:nat_lbytes sz ->
-  Lemma (is_well_formed_partial (ps_nat_lbytes sz) pre x)
-  [SMTPat (is_well_formed_partial (ps_nat_lbytes sz) pre x)]
+  Lemma (is_well_formed_prefix (ps_nat_lbytes sz) pre x)
+  [SMTPat (is_well_formed_prefix (ps_nat_lbytes sz) pre x)]
 
 val ps_nat_lbytes_length:
   #bytes:Type0 -> {| bytes_like bytes |} -> sz:nat ->
@@ -335,104 +335,104 @@ val ps_nat_lbytes_length:
   [SMTPat (prefixes_length #bytes ((ps_nat_lbytes sz).serialize x))]
 
 
-(*** Exact parsers ***)
+(*** Whole parsers ***)
 
 /// This structure describe the non-composable interface for parser
-/// The lemmas are similar (but simpler!) as the ones in `parser_serializer_unit`
+/// The lemmas are similar (but simpler!) as the ones in `parser_serializer_prefix`
 ///
 /// -- Begin parenthesis --
 ///
 /// Actually, these parsers are useful for composability purposes.
 /// Here is how we construct a `parser_serializer (list a)` given a `parser_serializer a:
 ///
-/// Step 1: use `pse_list` to construct a `parser_serializer_exact (list a)` using `parser_serializer a`.
-/// This exact parser runs repeatedly the parser of a to the bytes, to construct a list of a.
+/// Step 1: use `ps_whole_list` to construct a `parser_serializer_whole (list a)` using `parser_serializer a`.
+/// This whole parser runs repeatedly the parser of a to the bytes, to construct a list of a.
 ///
-/// Step 2: use `pse_to_ps` that first read a prefix containing the length, then slice the input bytes to have exactly the bytes containing the list and feed it to the exact parser.
+/// Step 2: use `pse_to_ps` that first read a prefix containing the length, then slice the input bytes to have exactly the bytes containing the list and feed it to the whole parser.
 ///
 /// -- End parenthesis --
 
-noeq type parser_serializer_exact (bytes:Type0) {|bytes_like bytes|} (a:Type) = {
-  parse_exact: bytes -> option a;
-  serialize_exact: a -> bytes;
-  parse_serialize_inv_exact: x:a -> Lemma (
-    parse_exact (serialize_exact x) == Some x
+noeq type parser_serializer_whole (bytes:Type0) {|bytes_like bytes|} (a:Type) = {
+  parse: bytes -> option a;
+  serialize: a -> bytes;
+  parse_serialize_inv: x:a -> Lemma (
+    parse (serialize x) == Some x
   );
-  serialize_parse_inv_exact: buf:bytes -> Lemma (
-    match parse_exact buf with
-    | Some x -> serialize_exact x == buf
+  serialize_parse_inv: buf:bytes -> Lemma (
+    match parse buf with
+    | Some x -> serialize x == buf
     | None -> True
   );
 }
 
-let is_well_formed_exact (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer_exact bytes a) (pre:bytes_compatible_pre bytes) (x:a) =
-  pre (ps_a.serialize_exact x)
+let is_well_formed_whole (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer_whole bytes a) (pre:bytes_compatible_pre bytes) (x:a) =
+  pre (ps_a.serialize x)
 
-val ps_to_pse: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> parser_serializer_unit bytes a -> parser_serializer_exact bytes a
+val ps_prefix_to_ps_whole: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> parser_serializer_prefix bytes a -> parser_serializer_whole bytes a
 
-val ps_to_pse_is_well_formed:
+val ps_prefix_to_ps_whole_is_well_formed:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
-  ps_a:parser_serializer_unit bytes a ->
+  ps_a:parser_serializer_prefix bytes a ->
   pre:bytes_compatible_pre bytes -> x:a ->
-  Lemma (is_well_formed_exact (ps_to_pse ps_a) pre x <==> is_well_formed_partial ps_a pre x)
-  [SMTPat (is_well_formed_exact (ps_to_pse ps_a) pre x)]
+  Lemma (is_well_formed_whole (ps_prefix_to_ps_whole ps_a) pre x <==> is_well_formed_prefix ps_a pre x)
+  [SMTPat (is_well_formed_whole (ps_prefix_to_ps_whole ps_a) pre x)]
 
-val ps_to_pse_length:
+val ps_prefix_to_ps_whole_length:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
-  ps_a:parser_serializer_unit bytes a ->
+  ps_a:parser_serializer_prefix bytes a ->
   x:a ->
-  Lemma (length ((ps_to_pse ps_a).serialize_exact x) == prefixes_length (ps_a.serialize x))
-  [SMTPat (length ((ps_to_pse ps_a).serialize_exact x))]
+  Lemma (length ((ps_prefix_to_ps_whole ps_a).serialize x) == prefixes_length (ps_a.serialize x))
+  [SMTPat (length ((ps_prefix_to_ps_whole ps_a).serialize x))]
 
-val pse_list: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:parser_serializer bytes a -> parser_serializer_exact bytes (list a)
+val ps_whole_list: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:parser_serializer bytes a -> parser_serializer_whole bytes (list a)
 
-val pse_list_is_well_formed:
+val ps_whole_list_is_well_formed:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
   ps_a:parser_serializer bytes a ->
   pre:bytes_compatible_pre bytes -> l:list a ->
-  Lemma (is_well_formed_exact (pse_list ps_a) pre l <==> for_allP (is_well_formed_partial ps_a pre) l)
-  [SMTPat (is_well_formed_exact (pse_list ps_a) pre l)]
+  Lemma (is_well_formed_whole (ps_whole_list ps_a) pre l <==> for_allP (is_well_formed_prefix ps_a pre) l)
+  [SMTPat (is_well_formed_whole (ps_whole_list ps_a) pre l)]
 
-let rec bytes_length (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer_unit bytes a) (l:list a): nat =
+let rec bytes_length (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer_prefix bytes a) (l:list a): nat =
   match l with
   | [] -> 0
   | h::t -> (prefixes_length (ps_a.serialize h)) + bytes_length ps_a t
 
-val pse_list_length:
+val ps_whole_list_length:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
   ps_a:parser_serializer bytes a ->
   l:list a ->
-  Lemma (length ((pse_list ps_a).serialize_exact l) == bytes_length ps_a l)
-  [SMTPat (length ((pse_list ps_a).serialize_exact l))]
+  Lemma (length ((ps_whole_list ps_a).serialize l) == bytes_length ps_a l)
+  [SMTPat (length ((ps_whole_list ps_a).serialize l))]
 
-val bind_exact: #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:(a -> Type) -> ps_a:parser_serializer_unit bytes a -> ps_b:(xa:a -> parser_serializer_exact bytes (b xa)) -> parser_serializer_exact bytes (dtuple2 a b)
+val bind_whole: #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:(a -> Type) -> ps_a:parser_serializer_prefix bytes a -> ps_b:(xa:a -> parser_serializer_whole bytes (b xa)) -> parser_serializer_whole bytes (dtuple2 a b)
 
-val bind_exact_is_well_formed_exact:
+val bind_whole_is_well_formed_whole:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:(a -> Type) ->
-  ps_a:parser_serializer_unit bytes a -> ps_b:(xa:a -> parser_serializer_exact bytes (b xa)) ->
+  ps_a:parser_serializer_prefix bytes a -> ps_b:(xa:a -> parser_serializer_whole bytes (b xa)) ->
   pre:bytes_compatible_pre bytes -> xa:a -> xb:(b xa) ->
-  Lemma (is_well_formed_exact (bind_exact ps_a ps_b) pre (|xa, xb|) <==> is_well_formed_partial ps_a pre xa /\ is_well_formed_exact (ps_b xa) pre xb)
-  [SMTPat (is_well_formed_exact (bind_exact ps_a ps_b) pre (|xa, xb|))]
+  Lemma (is_well_formed_whole (bind_whole ps_a ps_b) pre (|xa, xb|) <==> is_well_formed_prefix ps_a pre xa /\ is_well_formed_whole (ps_b xa) pre xb)
+  [SMTPat (is_well_formed_whole (bind_whole ps_a ps_b) pre (|xa, xb|))]
 
-val isomorphism_exact:
+val isomorphism_whole:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:Type ->
-  ps_a:parser_serializer_exact bytes a -> iso:isomorphism_between a b ->
-  parser_serializer_exact bytes b
+  ps_a:parser_serializer_whole bytes a -> iso:isomorphism_between a b ->
+  parser_serializer_whole bytes b
 
-val isomorphism_exact_is_well_formed:
+val isomorphism_whole_is_well_formed:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:Type ->
-  ps_a:parser_serializer_exact bytes a -> iso:isomorphism_between a b ->
+  ps_a:parser_serializer_whole bytes a -> iso:isomorphism_between a b ->
   pre:bytes_compatible_pre bytes -> xb:b ->
   Lemma
-  (is_well_formed_exact (isomorphism_exact ps_a iso) pre xb <==> is_well_formed_exact ps_a pre (iso.b_to_a xb))
-  [SMTPat (is_well_formed_exact (isomorphism_exact ps_a iso) pre xb)]
+  (is_well_formed_whole (isomorphism_whole ps_a iso) pre xb <==> is_well_formed_whole ps_a pre (iso.b_to_a xb))
+  [SMTPat (is_well_formed_whole (isomorphism_whole ps_a iso) pre xb)]
 
 (*** Parser for variable-length bytes / lists ***)
 
 /// The parsers below work by serializing length first, then the variable-length data.
 /// How do we serialize the length? There are several ways to do it, therefore the definitions below depend on a `nat_parser_serializer`.
 
-type nat_parser_serializer (bytes:Type0) {| bytes_like bytes |} (pre_length:nat -> bool)= ps:parser_serializer bytes (refined nat pre_length){forall pre n. is_well_formed_partial ps pre n}
+type nat_parser_serializer (bytes:Type0) {| bytes_like bytes |} (pre_length:nat -> bool)= ps:parser_serializer bytes (refined nat pre_length){forall pre n. is_well_formed_prefix ps pre n}
 
 type pre_length_bytes (bytes:Type0) {|bytes_like bytes|} (pre_length:nat -> bool) = b:bytes{pre_length (length b)}
 type pre_length_list (#bytes:Type0) {|bytes_like bytes|} (#a:Type) (ps_a:parser_serializer bytes a) (pre_length:nat -> bool) = l:list a{pre_length (bytes_length ps_a l)}
@@ -445,8 +445,8 @@ val ps_pre_length_bytes_is_well_formed:
   #bytes:Type0 -> {|bytes_like bytes|} ->
   pre_length:(nat -> bool) -> ps_length:nat_parser_serializer bytes pre_length ->
   pre:bytes_compatible_pre bytes -> x:pre_length_bytes bytes pre_length ->
-  Lemma (is_well_formed_partial (ps_pre_length_bytes pre_length ps_length) pre x <==> pre x)
-  [SMTPat (is_well_formed_partial (ps_pre_length_bytes pre_length ps_length) pre x)]
+  Lemma (is_well_formed_prefix (ps_pre_length_bytes pre_length ps_length) pre x <==> pre x)
+  [SMTPat (is_well_formed_prefix (ps_pre_length_bytes pre_length ps_length) pre x)]
 
 val ps_pre_length_bytes_length:
   #bytes:Type0 -> {|bytes_like bytes|} ->
@@ -462,8 +462,8 @@ val ps_pre_length_list_is_well_formed:
   pre_length:(nat -> bool) -> ps_length:nat_parser_serializer bytes pre_length ->
   ps_a:parser_serializer bytes a ->
   pre:bytes_compatible_pre bytes -> x:pre_length_list ps_a pre_length ->
-  Lemma (is_well_formed_partial (ps_pre_length_list pre_length ps_length ps_a) pre x <==> for_allP (is_well_formed_partial ps_a pre) x)
-  [SMTPat (is_well_formed_partial (ps_pre_length_list pre_length ps_length ps_a) pre x)]
+  Lemma (is_well_formed_prefix (ps_pre_length_list pre_length ps_length ps_a) pre x <==> for_allP (is_well_formed_prefix ps_a pre) x)
+  [SMTPat (is_well_formed_prefix (ps_pre_length_list pre_length ps_length ps_a) pre x)]
 
 val ps_pre_length_list_length:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
@@ -480,8 +480,8 @@ val ps_pre_length_seq_is_well_formed:
   pre_length:(nat -> bool) -> ps_length:nat_parser_serializer bytes pre_length ->
   ps_a:parser_serializer bytes a ->
   pre:bytes_compatible_pre bytes -> x:pre_length_seq ps_a pre_length ->
-  Lemma (is_well_formed_partial (ps_pre_length_seq pre_length ps_length ps_a) pre x <==> for_allP (is_well_formed_partial ps_a pre) (Seq.seq_to_list x))
-  [SMTPat (is_well_formed_partial (ps_pre_length_seq pre_length ps_length ps_a) pre x)]
+  Lemma (is_well_formed_prefix (ps_pre_length_seq pre_length ps_length ps_a) pre x <==> for_allP (is_well_formed_prefix ps_a pre) (Seq.seq_to_list x))
+  [SMTPat (is_well_formed_prefix (ps_pre_length_seq pre_length ps_length ps_a) pre x)]
 
 val ps_pre_length_seq_length:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->

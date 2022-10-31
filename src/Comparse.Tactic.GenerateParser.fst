@@ -159,7 +159,7 @@ let parser_from_type (bytes_term, bytes_like_term) t =
   )
   | _ -> my_fail ()
 
-irreducible let with_parser (#bytes:Type0) {|bytes_like bytes|} (#a:Type0) (x:parser_serializer_unit bytes a) = ()
+irreducible let with_parser (#bytes:Type0) {|bytes_like bytes|} (#a:Type0) (x:parser_serializer_prefix bytes a) = ()
 
 val parser_from_binder: bytes_impl -> binder -> Tac parser_term
 let parser_from_binder bi b =

@@ -21,18 +21,18 @@ let mk_lemma_type_ensures bi ps_term pre_term x_term ctors =
     let branch_term =
       Tactics.Util.fold_right (fun b acc ->
         let (ps_b, _) = GenerateParser.parser_from_binder bi b in
-        (`(is_well_formed_partial (`#ps_b) (`#pre_term) (`#(binder_to_term b)) /\ (`#acc)))
+        (`(is_well_formed_prefix (`#ps_b) (`#pre_term) (`#(binder_to_term b)) /\ (`#acc)))
       ) binders (`True)
     in
     (branch_pattern, branch_term)
   in
-  let lhs = `(is_well_formed_partial (`#ps_term) (`#pre_term) (`#x_term)) in
+  let lhs = `(is_well_formed_prefix (`#ps_term) (`#pre_term) (`#x_term)) in
   let rhs = pack (Tv_Match x_term None (Tactics.Util.map ctor_to_branch ctors)) in
   `((`#lhs) <==> (`#rhs))
 
 val mk_lemma_type_smtpat: term -> term -> term -> Tac term
 let mk_lemma_type_smtpat ps_term pre_term x_term =
-  `(is_well_formed_partial (`#ps_term) (`#pre_term) (`#x_term))
+  `(is_well_formed_prefix (`#ps_term) (`#pre_term) (`#x_term))
 
 val mk_lemma_type: term -> list binder -> list ctor -> Tac term
 let mk_lemma_type type_unapplied params ctors =
@@ -60,24 +60,24 @@ let apply_propositional_extensionality p1 p2 _ = FStar.PropositionalExtensionali
 
 val my_isomorphism_is_well_formed_with_id:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:Type ->
-  ps_a:parser_serializer_unit bytes a ->
+  ps_a:parser_serializer_prefix bytes a ->
   a_to_b:(a -> b) -> b_to_a:(b -> a) ->
   a_to_b_to_a:(x:a -> squash (b_to_a (a_to_b x) == x)) ->
   b_to_a_to_b:(x:b -> squash (a_to_b (b_to_a x) == x)) ->
   pre:bytes_compatible_pre bytes -> xb:b ->
   squash
-  (is_well_formed_partial (isomorphism ps_a ({a_to_b = id a_to_b; b_to_a = id b_to_a; a_to_b_to_a; b_to_a_to_b})) pre xb <==> is_well_formed_partial ps_a pre (b_to_a xb))
+  (is_well_formed_prefix (isomorphism ps_a ({a_to_b = id a_to_b; b_to_a = id b_to_a; a_to_b_to_a; b_to_a_to_b})) pre xb <==> is_well_formed_prefix ps_a pre (b_to_a xb))
 let my_isomorphism_is_well_formed_with_id #bytes #bl #a #b ps_a a_to_b b_to_a a_to_b_to_a b_to_a_to_b pre xb = ()
 
 val my_isomorphism_is_well_formed:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:Type ->
-  ps_a:parser_serializer_unit bytes a ->
+  ps_a:parser_serializer_prefix bytes a ->
   a_to_b:(a -> b) -> b_to_a:(b -> a) ->
   a_to_b_to_a:(x:a -> squash (b_to_a (a_to_b x) == x)) ->
   b_to_a_to_b:(x:b -> squash (a_to_b (b_to_a x) == x)) ->
   pre:bytes_compatible_pre bytes -> xb:b ->
   squash
-  (is_well_formed_partial (isomorphism ps_a ({a_to_b; b_to_a; a_to_b_to_a; b_to_a_to_b})) pre xb <==> is_well_formed_partial ps_a pre (b_to_a xb))
+  (is_well_formed_prefix (isomorphism ps_a ({a_to_b; b_to_a; a_to_b_to_a; b_to_a_to_b})) pre xb <==> is_well_formed_prefix ps_a pre (b_to_a xb))
 let my_isomorphism_is_well_formed #bytes #bl #a #b ps_a a_to_b b_to_a a_to_b_to_a b_to_a_to_b pre xb = ()
 
 val simplify_and_eq_lemma: p1:prop -> p2:prop -> squash p1 -> squash (p1 /\ p2 <==> p2)
@@ -104,7 +104,7 @@ let simplify_is_well_formed_lemma () =
           guard (eq_term `term_fv_eq` (`(<==>)));
           let (is_well_formed_term, args) = collect_app lhs in
           guard (List.Tot.length args = 6);
-          guard (is_well_formed_term `term_fv_eq` (`is_well_formed_partial));
+          guard (is_well_formed_term `term_fv_eq` (`is_well_formed_prefix));
           (fst (List.Tot.index args 3), fst (List.Tot.index args 5))
         )
         | _ -> fail "goal is not an equiv?"
@@ -120,7 +120,7 @@ let simplify_is_well_formed_lemma () =
     norm [delta_only [ps_qn]];
     let ctrl_with (what:term) (t:term): Tac (bool & ctrl_flag) =
       let (hd, args) = collect_app t in
-      let hd_ok = hd `term_fv_eq` (`is_well_formed_partial) in
+      let hd_ok = hd `term_fv_eq` (`is_well_formed_prefix) in
       if hd_ok && List.Tot.length args = 6 then (
         let ps_term = List.Tot.index args 3 in
         let (ps_unapplied_term, _) = collect_app (fst ps_term) in
