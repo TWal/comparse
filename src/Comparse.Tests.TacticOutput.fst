@@ -114,11 +114,11 @@ let bytes_to_hex_string b =
 
 val parse_ok: #a:eqtype -> parser_serializer bytes a -> string -> a -> ML bool
 let parse_ok #a ps_a s x =
-  (ps_prefix_to_ps_whole ps_a).parse_whole (hex_string_to_bytes s) = Some x
+  (ps_prefix_to_ps_whole ps_a).parse (hex_string_to_bytes s) = Some x
 
 val parse_fail: #a:Type -> parser_serializer bytes a -> string -> ML bool
 let parse_fail #a ps_a s =
-  None? ((ps_prefix_to_ps_whole ps_a).parse_whole (hex_string_to_bytes s))
+  None? ((ps_prefix_to_ps_whole ps_a).parse (hex_string_to_bytes s))
 
 let from_string = hex_string_to_bytes
 val with_length: n:nat -> bytes -> ML (b:bytes{Seq.length b == n})
