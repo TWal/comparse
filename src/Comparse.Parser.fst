@@ -799,7 +799,7 @@ let ps_true_nat #bytes #bl =
 
 type nat_lbits (sz:nat) = n:nat{n < pow2 sz}
 
-#push-options "--z3rlimit 100 --quake 1/5"
+#push-options "--fuel 0 --ifuel 0 --z3cliopt smt.arith.nl=false"
 val euclidean_div_uniqueness: b:pos -> q1:nat -> q2:nat -> r1:nat -> r2:nat -> Lemma
   (requires r1 < b /\ r2 < b /\ (q1*b + r1 == q2*b + r2))
   (ensures q1 == q2 /\ r1 == r2)
@@ -808,8 +808,14 @@ let rec euclidean_div_uniqueness b q1 q2 r1 r2 =
     euclidean_div_uniqueness b q2 q1 r2 r1
   ) else (
     if q1 = 0 then (
-      ()
+      FStar.Math.Lemmas.mul_zero_left_is_zero b;
+      if 1 <= q2 then (
+        FStar.Math.Lemmas.lemma_mult_le_right b 1 q2;
+        assert(False)
+      ) else ()
     ) else (
+      FStar.Math.Lemmas.distributivity_sub_left q1 1 b;
+      FStar.Math.Lemmas.distributivity_sub_left q2 1 b;
       euclidean_div_uniqueness b (q1-1) (q2-1) r1 r2
     )
   )
