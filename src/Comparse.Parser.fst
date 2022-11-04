@@ -82,7 +82,6 @@ let rec pre_add_prefixes_to_for_allP_pre #bytes #bl pre l suffix =
   match l with
   | [] -> ()
   | h::t -> (
-    concat_length h (add_prefixes t suffix);
     split_concat h (add_prefixes t suffix);
     assert(split (add_prefixes l suffix) (length h) == Some (h, add_prefixes t suffix));
     pre_add_prefixes_to_for_allP_pre pre t suffix
@@ -270,7 +269,7 @@ let ps_nat_lbytes #bytes #bl sz =
   let parse_nat_lbytes (buf:bytes): option (nat_lbytes sz & bytes) =
     match (ps_lbytes sz).parse buf with
     | Some (x, suffix) -> (
-      match to_nat sz (x <: bytes) with
+      match to_nat (x <: bytes) with
       | Some n -> Some (n, suffix)
       | None -> None
     )
@@ -289,7 +288,7 @@ let ps_nat_lbytes #bytes #bl sz =
     serialize_parse_inv = (fun (buf:bytes) ->
       (ps_lbytes sz).serialize_parse_inv buf;
       match (ps_lbytes sz).parse buf with
-      | Some (x, suffix) -> to_from_nat #bytes sz x
+      | Some (x, suffix) -> to_from_nat #bytes x
       | None -> ()
     );
   }
@@ -674,7 +673,7 @@ let rec _parse_nat #bytes #bl b =
       if length l <> 1 then (
         None
       ) else (
-        match to_nat #bytes 1 l with
+        match to_nat #bytes l with
         | None -> None
         | Some l_value -> (
           if l_value = 0 then (
@@ -703,13 +702,11 @@ let ps_nat_unary #bytes #bl =
   let rec parse_serialize_inv (n:nat) (suffix:bytes): Lemma (_parse_nat (add_prefixes (_serialize_nat n) suffix) == Some (n, suffix)) =
     if n = 0 then (
       assert_norm (add_prefixes #bytes [from_nat 1 0] suffix == concat (from_nat 1 0) suffix);
-      concat_length #bytes (from_nat 1 0) suffix;
       split_concat #bytes (from_nat 1 0) suffix;
       split_length (concat #bytes (from_nat 1 0) suffix) 1;
       from_to_nat #bytes 1 0
     ) else (
       parse_serialize_inv (n-1) suffix;
-      concat_length #bytes (from_nat 1 1) (add_prefixes (_serialize_nat (n-1)) suffix);
       split_concat #bytes (from_nat 1 1) (add_prefixes (_serialize_nat (n-1)) suffix);
       split_length (concat #bytes (from_nat 1 1) (add_prefixes (_serialize_nat (n-1)) suffix)) 1;
       from_to_nat #bytes 1 1
@@ -720,13 +717,13 @@ let ps_nat_unary #bytes #bl =
     | None -> ()
     | Some (n, suffix) -> (
       let (l, r) = Some?.v (split #bytes buf 1) in
-      let l_value = Some?.v (to_nat #bytes 1 l) in
+      let l_value = Some?.v (to_nat #bytes l) in
       if l_value = 0 then (
-        to_from_nat 1 l;
+        to_from_nat l;
         concat_split buf 1;
         assert_norm (add_prefixes #bytes [from_nat 1 0] suffix == concat (from_nat 1 0) suffix)
       ) else if l_value = 1 then (
-        to_from_nat 1 l;
+        to_from_nat l;
         concat_split buf 1;
         split_length (concat #bytes l r) 1;
         serialize_parse_inv r

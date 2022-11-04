@@ -29,16 +29,14 @@ class bytes_like (bytes:Type0) = {
   concat: bytes -> bytes -> bytes;
   concat_length: b1:bytes -> b2:bytes -> Lemma (length (concat b1 b2) == (length b1) + (length b2));
 
-  split: b:bytes -> i:nat{i <= length b} -> option (bytes & bytes);
-  split_length: b:bytes -> i:nat{i <= length b} -> Lemma (
+  split: b:bytes -> i:nat -> option (bytes & bytes);
+  split_length: b:bytes -> i:nat -> Lemma (
     match split b i with
     | Some (b1, b2) -> length b1 == i /\ i+length b2 == length b
     | None -> True
   );
 
-  split_concat: b1:bytes -> b2:bytes -> Lemma
-    (requires (length b1) <= (length (concat b1 b2)))
-    (ensures split (concat b1 b2) (length b1) == Some (b1, b2));
+  split_concat: b1:bytes -> b2:bytes -> Lemma (split (concat b1 b2) (length b1) == Some (b1, b2));
 
   concat_split: b:bytes -> i:nat{i <= length b} -> Lemma (
     match split b i with
@@ -46,15 +44,15 @@ class bytes_like (bytes:Type0) = {
     | _ -> True
   );
 
-  to_nat: sz:nat -> b:bytes{length b == sz} -> option (nat_lbytes sz);
+  to_nat: b:bytes -> option (nat_lbytes (length b));
   from_nat: sz:nat -> nat_lbytes sz -> b:bytes{length b == sz};
 
   from_to_nat: sz:nat -> n:nat_lbytes sz -> Lemma
-    (to_nat sz (from_nat sz n) == Some n);
+    (to_nat (from_nat sz n) == Some n);
 
-  to_from_nat: sz:nat -> b:bytes{length b == sz} -> Lemma (
-    match to_nat sz b with
-    | Some n -> b == from_nat sz n
+  to_from_nat: b:bytes -> Lemma (
+    match to_nat b with
+    | Some n -> b == from_nat (length b) n
     | None -> True
   );
 }
@@ -85,7 +83,10 @@ let seq_u8_bytes_like: bytes_like (Seq.seq UInt8.t) = {
   concat_length = (fun b1 b2 -> ());
 
   split = (fun b i ->
-    Some (Seq.slice b 0 i, Seq.slice b i (Seq.length b))
+    if i <= Seq.length b then
+      Some (Seq.slice b 0 i, Seq.slice b i (Seq.length b))
+    else
+      None
   );
 
   split_length = (fun b i -> ());
@@ -97,7 +98,7 @@ let seq_u8_bytes_like: bytes_like (Seq.seq UInt8.t) = {
     assert(b `Seq.eq` Seq.append (Seq.slice b 0 i) (Seq.slice b i (Seq.length b)))
   );
 
-  to_nat = (fun sz b ->
+  to_nat = (fun b ->
     FStar.Endianness.lemma_be_to_n_is_bounded b;
     Some (FStar.Endianness.be_to_n b)
   );
@@ -106,7 +107,7 @@ let seq_u8_bytes_like: bytes_like (Seq.seq UInt8.t) = {
   );
 
   from_to_nat = (fun sz n -> ());
-  to_from_nat = (fun sz b -> ());
+  to_from_nat = (fun b -> ());
 }
 
 let refine_bytes_like (bytes:Type0) {|bytes_like bytes|} (pre:bytes_compatible_pre bytes): bytes_like (b:bytes{pre b}) = {
@@ -129,9 +130,9 @@ let refine_bytes_like (bytes:Type0) {|bytes_like bytes|} (pre:bytes_compatible_p
   split_concat = (fun b1 b2 -> split_concat #bytes b1 b2);
   concat_split = (fun b i -> concat_split #bytes b i);
 
-  to_nat = (fun sz b -> to_nat #bytes sz b);
+  to_nat = (fun b -> to_nat #bytes b);
   from_nat = (fun sz n -> from_nat #bytes sz n);
 
   from_to_nat = (fun sz n -> from_to_nat #bytes sz n);
-  to_from_nat = (fun sz b -> to_from_nat #bytes sz b);
+  to_from_nat = (fun b -> to_from_nat #bytes b);
 }
