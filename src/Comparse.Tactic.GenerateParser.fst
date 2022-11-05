@@ -628,8 +628,8 @@ let is_tagged_type constructors =
     true
   )
 
-val gen_parser_fun: term -> Tac (typ & term & bool)
-let gen_parser_fun type_fv =
+val gen_parser_fun: term -> term -> Tac (typ & term & bool)
+let gen_parser_fun parser_ty type_fv =
   let env = top_env () in
   let type_name = get_name_from_fv type_fv in
   let type_declaration =
@@ -666,15 +666,15 @@ let gen_parser_fun type_fv =
   in
   let parser_fun = mk_abs parser_params parser_fun_body in
   let (bytes_term, bytes_like_term) = bi in
-  let unparametrized_parser_type = mk_app (`parser_serializer) [bytes_term, Q_Explicit; bytes_like_term, Q_Implicit; result_parsed_type, Q_Explicit] in
+  let unparametrized_parser_type = mk_app parser_ty [bytes_term, Q_Explicit; bytes_like_term, Q_Implicit; result_parsed_type, Q_Explicit] in
   let parser_type = mk_arr parser_params (pack_comp (C_Total unparametrized_parser_type u_unk [])) in
   (parser_type, parser_fun, is_opaque)
 
-val gen_parser: term -> Tac decls
-let gen_parser type_fv =
+val gen_parser_aux: term -> term -> Tac decls
+let gen_parser_aux parser_ty type_fv =
   let type_name = get_name_from_fv type_fv in
   let parser_name = List.Tot.snoc (moduleof (top_env ()), "ps_" ^ (last type_name)) in
-  let (parser_type, parser_fun, is_opaque) = gen_parser_fun type_fv in
+  let (parser_type, parser_fun, is_opaque) = gen_parser_fun parser_ty type_fv in
   //dump (term_to_string parser_fun);
   //dump (term_to_string parser_type);
   let parser_letbinding = pack_lb ({
@@ -689,3 +689,11 @@ let gen_parser type_fv =
     else sv
   in
   [sv]
+
+val gen_parser: term -> Tac decls
+let gen_parser type_fv =
+  gen_parser_aux (`parser_serializer) type_fv
+
+val gen_parser_prefix: term -> Tac decls
+let gen_parser_prefix type_fv =
+  gen_parser_aux (`parser_serializer_prefix) type_fv
