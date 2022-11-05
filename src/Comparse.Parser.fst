@@ -27,7 +27,7 @@ let is_well_formed_prefix_weaken #bytes #bl #a ps_a pre_strong pre_weak x =
   for_allP_eq pre_strong (ps_a.serialize x);
   for_allP_eq pre_weak (ps_a.serialize x)
 
-let is_not_unit #bytes #bl #a ps_a = forall b. length b == 0 ==> ps_a.parse b == None
+let is_not_unit #bytes #bl #a ps_a = forall (x:a). 1 <= prefixes_length (ps_a.serialize x)
 
 (*** Helper functions ***)
 
@@ -141,12 +141,9 @@ let bind #bytes #bl #a #b ps_a ps_b =
   })
 
 let bind_is_not_unit #bytes #bl #a #b ps_a ps_b =
-  introduce forall b. length b == 0 ==> (bind ps_a ps_b).parse b == None with (
-    match ps_a.parse b with
-    | None -> ()
-    | Some (xa, b_suffix) ->
-      ps_a.serialize_parse_inv b;
-      add_prefixes_length (ps_a.serialize xa) b_suffix
+  introduce forall x. 1 <= prefixes_length ((bind ps_a ps_b).serialize x) with (
+    let (|xa, xb|) = x in
+    prefixes_length_concat (ps_a.serialize xa) ((ps_b xa).serialize xb)
   )
 
 let bind_is_well_formed #bytes #bl #a #b ps_a ps_b pre xa xb = ()
@@ -257,7 +254,8 @@ let ps_lbytes #bytes #bl n =
   }
 #pop-options
 
-let ps_lbytes_is_not_unit #bytes #bl n = ()
+let ps_lbytes_is_not_unit #bytes #bl n =
+  assert_norm(forall b. prefixes_length ((ps_lbytes #bytes n).serialize b) == n)
 
 let ps_lbytes_is_well_formed #bytes #bl n pre x = assert_norm(for_allP pre [x] <==> pre x)
 
