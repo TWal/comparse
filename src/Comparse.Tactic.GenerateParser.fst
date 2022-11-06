@@ -469,10 +469,6 @@ let or_split b1 b2 p _ _ = ()
 
 val eq_to_eq: a:eqtype -> x:a -> y:a -> p:Type0 -> squash (x == y ==> p) -> squash (x = y ==> p)
 let eq_to_eq a x y p _ = ()
-let test_implies_intro_1 p q (f: squash p -> squash q)
-  : squash (p ==> q)
-  = introduce p ==> q
-    with x. f x
 
 val add_squash: p:Type0 -> q:Type0 -> squash (squash p ==> q) -> squash (p ==> q)
 let add_squash p q _ =
@@ -489,7 +485,7 @@ let prove_pair_sum_pair_isomorphism () =
   apply_lemma (`dtuple2_ind);
   apply (`refined_ind);
   let _ = forall_intro () in
-  compute ();
+  norm [primops; iota];
   let solve_one_goal () =
     apply (`eq_to_eq);
     apply (`add_squash);
