@@ -464,7 +464,7 @@ let mk_sum_to_middle_fun sum_typ tag_vals ctors =
 val refined_ind: a:Type -> pred:(a -> bool) -> p:(refined a pred -> Type0) -> squash (forall (x:a). pred x ==> p x) -> squash (forall (x:refined a pred). p x)
 let refined_ind a pred p _ = ()
 
-val or_split: b1:bool -> b2:bool -> p:Type0 -> squash (b1 ==> p) -> squash (b2 ==> p) -> squash (b1 || b2 ==> p)
+val or_split: b1:bool -> b2:bool -> (p:(squash (b1 || b2) -> Type0)) -> squash (b1 ==> p ()) -> squash (b2 ==> p ()) -> squash (b1 || b2 ==> p ())
 let or_split b1 b2 p _ _ = ()
 
 val eq_to_eq: a:eqtype -> x:a -> y:a -> p:Type0 -> squash (x == y ==> p) -> squash (x = y ==> p)
