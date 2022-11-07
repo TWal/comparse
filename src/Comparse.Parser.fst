@@ -140,6 +140,8 @@ let bind #bytes #bl #a #b ps_a ps_b =
     );
   })
 
+let bind_serialize #bytes #bl #a #b ps_a ps_b xa xb = ()
+
 let bind_is_not_unit #bytes #bl #a #b ps_a ps_b =
   introduce forall x. 1 <= prefixes_length ((bind ps_a ps_b).serialize x) with (
     let (|xa, xb|) = x in
@@ -178,6 +180,8 @@ let isomorphism #bytes #bl #a #b ps_a iso =
   } in
   res
 
+let isomorphism_serialize #bytes #bl #a #b ps_a iso x = ()
+
 let isomorphism_is_not_unit #bytes #bl #a #b ps_a iso = ()
 
 let isomorphism_is_well_formed #bytes #bl #a #b ps_a iso pre xb = ()
@@ -198,6 +202,8 @@ let refine #bytes #bl #a ps_a pred =
     serialize_parse_inv = (fun buf -> ps_a.serialize_parse_inv buf);
   }
 
+let refine_serialize #bytes #bl #a ps_a pred x = ()
+
 let refine_is_not_unit #bytes #bl #a ps_a pred = ()
 
 let refine_is_well_formed #bytes #bl #a ps_a pred pre x = ()
@@ -213,6 +219,8 @@ let ps_unit #bytes #bl =
     parse_serialize_inv = (fun _ b -> assert_norm(add_prefixes [] b == b));
     serialize_parse_inv = (fun buf -> assert_norm(add_prefixes [] buf == buf));
   }
+
+let ps_unit_serialize #bytes #bl x = ()
 
 let ps_unit_is_well_formed #bytes #bl pre x = assert_norm(for_allP pre [] <==> True)
 
@@ -254,6 +262,8 @@ let ps_lbytes #bytes #bl n =
   }
 #pop-options
 
+let ps_lbytes_serialize #bytes #bl n x = ()
+
 let ps_lbytes_is_not_unit #bytes #bl n =
   assert_norm(forall b. prefixes_length ((ps_lbytes #bytes n).serialize b) == n)
 
@@ -290,6 +300,8 @@ let ps_nat_lbytes #bytes #bl sz =
       | None -> ()
     );
   }
+
+let ps_nat_lbytes_serialize #bytes #bl sz x = ()
 
 let ps_nat_lbytes_is_not_unit #bytes #bl n = ()
 
@@ -333,6 +345,8 @@ let bind_whole #bytes #bl #a #b ps_a ps_b =
     );
   }
 
+let bind_whole_serialize #bytes #bl #a #b ps_a ps_b xa xb = ()
+
 let bind_whole_is_well_formed_whole #bytes #bl #a #b ps_a ps_b pre xa xb =
   introduce is_well_formed_whole (bind_whole ps_a ps_b) pre (|xa, xb|) ==> is_well_formed_prefix ps_a pre xa /\ is_well_formed_whole (ps_b xa) pre xb
   with _. (
@@ -369,6 +383,8 @@ let isomorphism_whole #bytes #bl #a #b ps_a iso =
     );
   }
 
+let isomorphism_whole_serialize #bytes #bl #a #b ps_a iso x = ()
+
 let isomorphism_whole_is_well_formed #bytes #bl #a #b ps_a iso pre xb = ()
 
 let refine_whole #bytes #bl #a ps_a pred =
@@ -400,7 +416,6 @@ let ps_prefix_to_ps_whole #bytes #bl #a ps_a =
         None
   in
   let serialize_a (x:a): bytes =
-    ps_a.parse_serialize_inv x empty;
     add_prefixes (ps_a.serialize x) empty
   in
   {
@@ -419,6 +434,8 @@ let ps_prefix_to_ps_whole #bytes #bl #a ps_a =
       )
     );
   }
+
+let ps_prefix_to_ps_whole_serialize #bytes #bl #a ps_a x = ()
 
 let ps_prefix_to_ps_whole_is_well_formed #bytes #bl #a ps_a pre x =
   introduce is_well_formed_whole (ps_prefix_to_ps_whole ps_a) pre x ==> is_well_formed_prefix ps_a pre x
@@ -467,12 +484,16 @@ let ps_whole_to_bare_ps_prefix #bytes #bl #a len ps_a =
     );
   }
 
+let ps_whole_to_bare_ps_prefix_serialize #bytes #bl #a len ps_a x = ()
+
 let ps_whole_to_ps_prefix #bytes #bl #a length_pre ps_nat ps_a =
   let b (sz:refined nat length_pre) = refined a (ps_whole_length_pred ps_a sz) in
   mk_isomorphism a
     (bind #bytes #_ #(refined nat length_pre) #b ps_nat (fun sz -> ps_whole_to_bare_ps_prefix sz (refine_whole ps_a (ps_whole_length_pred ps_a sz))))
     (fun (|sz, x|) -> x)
     (fun x -> (|length (ps_a.serialize x), x|))
+
+let ps_whole_to_ps_prefix_serialize #bytes #bl #a length_pre ps_length ps_a x = ()
 
 let ps_whole_to_ps_prefix_is_well_formed #bytes #bl #a length_pre ps_length ps_a pre x =
   let x_serialized = ps_a.serialize x in
@@ -484,7 +505,6 @@ let ps_whole_to_ps_prefix_length #bytes #bl #a length_pre ps_length ps_a x =
   let x_serialized = ps_a.serialize x in
   prefixes_length_concat (ps_length.serialize (length x_serialized)) [x_serialized];
   assert_norm (prefixes_length [x_serialized] == length x_serialized)
-
 
 (*** Whole parsers ***)
 
@@ -575,13 +595,20 @@ let ps_whole_list #bytes #bl #a ps_a =
 #pop-options
 
 #push-options "--fuel 1"
+let rec ps_whole_list_serialize #bytes #bl #a ps_a l =
+  assert_norm (forall l. (ps_whole_list ps_a).serialize l == _serialize_la ps_a l);
+  match l with
+  | [] -> ()
+  | h::t -> ps_whole_list_serialize ps_a t
+#pop-options
+
+#push-options "--fuel 1"
 let rec ps_whole_list_is_well_formed #bytes #bl #a ps_a pre l =
   // ????????
-  assert_norm ((ps_whole_list ps_a).serialize l == _serialize_la ps_a l);
+  assert_norm (forall l. (ps_whole_list ps_a).serialize l == _serialize_la ps_a l);
   match l with
   | [] -> ()
   | h::t -> (
-    assert_norm ((ps_whole_list ps_a).serialize t == _serialize_la ps_a t);
     introduce is_well_formed_whole (ps_whole_list ps_a) pre l ==> for_allP (is_well_formed_prefix ps_a pre) l
     with _. (
       ps_whole_list_is_well_formed ps_a pre t;
@@ -597,11 +624,10 @@ let rec ps_whole_list_is_well_formed #bytes #bl #a ps_a pre l =
 
 #push-options "--fuel 1"
 let rec ps_whole_list_length #bytes #bl #a ps_a l =
-  assert_norm ((ps_whole_list ps_a).serialize l == _serialize_la ps_a l);
+  assert_norm (forall l. (ps_whole_list ps_a).serialize l == _serialize_la ps_a l);
   match l with
   | [] -> empty_length #bytes ()
   | h::t ->
-    assert_norm ((ps_whole_list ps_a).serialize t == _serialize_la ps_a t);
     add_prefixes_length (ps_a.serialize h) (_serialize_la ps_a t);
     ps_whole_list_length ps_a t
 #pop-options
@@ -617,6 +643,9 @@ let ps_whole_pre_length_bytes #bytes #bl pre_length =
 let ps_pre_length_bytes #bytes #bl pre_length ps_length =
   ps_whole_to_ps_prefix pre_length ps_length (ps_whole_pre_length_bytes pre_length)
 
+let ps_pre_length_bytes_serialize #bytes #bl pre_length ps_length x =
+  ps_whole_to_ps_prefix_serialize pre_length ps_length (ps_whole_pre_length_bytes pre_length) x
+
 let ps_pre_length_bytes_is_well_formed #bytes #bl pre_length ps_length pre x =
   ps_whole_to_ps_prefix_is_well_formed pre_length ps_length (ps_whole_pre_length_bytes pre_length) pre x
 
@@ -630,6 +659,11 @@ let ps_whole_pre_length_list #bytes #bl #a pre_length ps_a =
 
 let ps_pre_length_list #bytes #bl #a pre_length ps_length ps_a =
   ps_whole_to_ps_prefix pre_length ps_length (ps_whole_pre_length_list pre_length ps_a)
+
+let ps_pre_length_list_serialize #bytes #bl #a pre_length ps_length ps_a x =
+  ps_whole_list_length ps_a x;
+  ps_whole_list_serialize ps_a x;
+  ps_whole_to_ps_prefix_serialize pre_length ps_length (ps_whole_pre_length_list pre_length ps_a) x
 
 let ps_pre_length_list_is_well_formed #bytes #bl #a pre_length ps_length ps_a pre x =
   ps_whole_to_ps_prefix_is_well_formed pre_length ps_length (ps_whole_pre_length_list pre_length ps_a) pre x;
@@ -654,6 +688,10 @@ let ps_pre_length_seq_length #bytes #bl #a pre_length ps_length ps_a x = ()
 let ps_tls_nat #bytes #bl r =
   let sz = find_nbytes r.max in
   mk_trivial_isomorphism (refine (ps_nat_lbytes sz) (in_range r))
+
+#push-options "--fuel 1"
+let ps_tls_nat_serialize #bytes #bl r x = ()
+#pop-options
 
 let ps_tls_nat_length #bytes #bl r x = ()
 
