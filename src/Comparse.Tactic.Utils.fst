@@ -77,3 +77,18 @@ let l_to_r_breq l =
     apply_lemma_rw squashed_equality
   in
   ctrl_rewrite BottomUp ctrl rw
+
+val foldr1: #a:Type -> (a -> a -> Tac a) -> list a -> Tac a
+let rec foldr1 #a f l =
+  match l with
+  | [] -> fail "foldr1: called on an empty list"
+  | [h] -> h
+  | h::t -> f h (foldr1 f t)
+
+val map2: #a:Type -> #b:Type -> #c:Type -> f:(a -> b -> Tac c) -> list a -> list b -> Tac (list c)
+let rec map2 #a #b #c f la lb =
+  match la, lb with
+  | [], [] -> []
+  | ha::ta, hb::tb ->
+    (f ha hb)::(map2 f ta tb)
+  | _, _ -> fail "map2: unconsistent length"

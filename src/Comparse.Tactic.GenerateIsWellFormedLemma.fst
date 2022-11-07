@@ -18,11 +18,14 @@ let mk_lemma_type_ensures bi ps_term pre_term x_term ctors =
         ) binders
       )
     in
+    let all_well_formness_terms = Tactics.Util.map (fun b ->
+      let (ps_b, _) = GenerateParser.parser_from_binder bi b in
+      (`(is_well_formed_prefix (`#ps_b) (`#pre_term) (`#(binder_to_term b))))
+    ) binders in
     let branch_term =
-      Tactics.Util.fold_right (fun b acc ->
-        let (ps_b, _) = GenerateParser.parser_from_binder bi b in
-        (`(is_well_formed_prefix (`#ps_b) (`#pre_term) (`#(binder_to_term b)) /\ (`#acc)))
-      ) binders (`True)
+      match all_well_formness_terms with
+      | [] -> (`True)
+      | _ -> foldr1 (fun cur_wf_term acc -> (`((`#cur_wf_term) /\ (`#acc)))) all_well_formness_terms
     in
     (branch_pattern, branch_term)
   in

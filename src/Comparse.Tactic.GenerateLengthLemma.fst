@@ -5,14 +5,6 @@ open Comparse.Parser
 open Comparse.Tactic.Utils
 open FStar.Tactics
 
-val map2: #a:Type -> #b:Type -> #c:Type -> f:(a -> b -> Tac c) -> list a -> list b -> Tac (list c)
-let rec map2 #a #b #c f la lb =
-  match la, lb with
-  | [], [] -> []
-  | ha::ta, hb::tb ->
-    (f ha hb)::(map2 f ta tb)
-  | _, _ -> fail "map2: unconsistent length"
-
 val mk_lemma_type_ensures: GenerateParser.bytes_impl -> term -> term -> list ctor -> Tac term
 let mk_lemma_type_ensures bi ps_term x_term ctors =
   let (opt_tag_parser, tag_opt_vals) =
@@ -41,23 +33,17 @@ let mk_lemma_type_ensures bi ps_term x_term ctors =
       let (ps_b, _) = GenerateParser.parser_from_binder bi b in
       term_to_length ps_b (binder_to_term b)
     in
-    let (neutral, binders) =
+    let binders_length = Tactics.Util.map binder_to_length binders in
+    let all_lengthes =
       match opt_tag_parser, opt_tag_val with
       | Some tag_parser, Some tag_val -> (
-        (term_to_length tag_parser tag_val, binders)
+        (term_to_length tag_parser tag_val)::binders_length
       )
       | None, None -> (
-        guard (Cons? binders);
-        let first_binder::binders = binders in
-        (binder_to_length first_binder, binders)
+        binders_length
       )
       | _, _ -> fail "mk_lemma_type_ensures: shouldn't happen ?!"
-    in
-    let branch_term =
-      Tactics.Util.fold_left (fun acc b ->
-        (`((`#acc) + (`#(binder_to_length b))))
-      ) neutral binders
-    in
+    in let branch_term = foldr1 (fun b_len acc -> (`((`#b_len) + (`#acc)))) all_lengthes in
     (branch_pattern, branch_term)
   in
   let lhs = `(prefixes_length (Mkparser_serializer_prefix?.serialize (`#ps_term) (`#x_term))) in
@@ -185,12 +171,9 @@ let simplify_length_lemma () =
       ctrl_rewrite TopDown (ctrl_with (`refine)) (rw_with_lemma (`refine_length));
       norm [primops; iota]
     );
-
-    // TODO: help the SMT by rewriting associativity of +?
-    // goal looks like a+(b+c) == (a+b)+c
-
-    // The last goals are easy enough for the SMT
-    // dump "end goal";
+    // Solve the goal by SMT, to use facts such as 0 == length (ps_unit.serialize ())
+    //trefl();
+    smt();
     gather_or_solve_explicit_guards_for_resolved_goals ()
   )
 
