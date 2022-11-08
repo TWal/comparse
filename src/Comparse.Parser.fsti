@@ -148,6 +148,7 @@ val bind_serialize:
   ps_a:parser_serializer_prefix bytes a -> ps_b:(xa:a -> parser_serializer_prefix bytes (b xa)) ->
   xa:a -> xb:b xa ->
   Lemma ((bind ps_a ps_b).serialize (|xa, xb|) == (ps_a.serialize xa) @ ((ps_b xa).serialize xb))
+  [SMTPat ((bind ps_a ps_b).serialize (|xa, xb|))]
 
 /// On concrete bytes we actually have an equivalence between the `requires` and the `ensures`.
 /// On symbolic bytes where you may have multiple bytes of length 0, this is not true anymore.
@@ -231,6 +232,7 @@ val isomorphism_serialize:
   ps_a:parser_serializer_prefix bytes a -> iso:isomorphism_between a b ->
   x:b ->
   Lemma ((isomorphism ps_a iso).serialize x == ps_a.serialize (iso.b_to_a x))
+  [SMTPat ((isomorphism ps_a iso).serialize x)]
 
 /// This type we have the equivalence even with symbolic bytes, but we don't need it so we can keep a consistent interface.
 val isomorphism_is_not_unit:
@@ -272,6 +274,7 @@ val refine_serialize:
   ps_a:parser_serializer_prefix bytes a -> pred:(a -> bool) ->
   x:refined a pred ->
   Lemma ((refine ps_a pred).serialize x == ps_a.serialize x)
+  [SMTPat ((refine ps_a pred).serialize x)]
 
 val refine_is_not_unit:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type ->
@@ -303,7 +306,8 @@ val ps_unit: #bytes:Type0 -> {| bytes_like bytes |} -> parser_serializer_prefix 
 val ps_unit_serialize:
   #bytes:Type0 -> {|bytes_like bytes|} ->
   x:unit ->
-  Lemma((ps_unit #bytes).serialize x == [])
+  Lemma ((ps_unit #bytes).serialize x == [])
+  [SMTPat ((ps_unit #bytes).serialize x)]
 
 val ps_unit_is_well_formed:
   #bytes:Type0 -> {| bl:bytes_like bytes |} ->
@@ -328,6 +332,7 @@ val ps_lbytes_serialize:
   n:nat ->
   x:lbytes bytes n ->
   Lemma ((ps_lbytes n).serialize x == [x])
+  [SMTPat ((ps_lbytes n).serialize x)]
 
 val ps_lbytes_is_not_unit:
   #bytes:Type0 -> {| bl:bytes_like bytes |} -> n:nat ->
@@ -359,6 +364,7 @@ val ps_nat_lbytes_serialize:
   sz:nat ->
   x:nat_lbytes sz ->
   Lemma ((ps_nat_lbytes #bytes sz).serialize x == [from_nat sz x])
+  [SMTPat ((ps_nat_lbytes #bytes sz).serialize x)]
 
 val ps_nat_lbytes_is_not_unit:
   #bytes:Type0 -> {| bl:bytes_like bytes |} -> n:nat ->
@@ -423,6 +429,7 @@ val bind_whole_serialize:
   ps_a:parser_serializer_prefix bytes a -> ps_b:(xa:a -> parser_serializer_whole bytes (b xa)) ->
   xa:a -> xb:b xa ->
   Lemma ((bind_whole ps_a ps_b).serialize (|xa, xb|) == add_prefixes (ps_a.serialize xa) ((ps_b xa).serialize xb))
+  [SMTPat ((bind_whole ps_a ps_b).serialize (|xa, xb|))]
 
 val bind_whole_is_well_formed_whole:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:(a -> Type) ->
@@ -441,6 +448,7 @@ val isomorphism_whole_serialize:
   ps_a:parser_serializer_whole bytes a -> iso:isomorphism_between a b ->
   x:b ->
   Lemma ((isomorphism_whole ps_a iso).serialize x == ps_a.serialize (iso.b_to_a x))
+  [SMTPat ((isomorphism_whole ps_a iso).serialize x)]
 
 val isomorphism_whole_is_well_formed:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:Type ->
@@ -483,6 +491,7 @@ val ps_prefix_to_ps_whole_serialize:
   ps_a:parser_serializer_prefix bytes a ->
   x:a ->
   Lemma ((ps_prefix_to_ps_whole ps_a).serialize x == add_prefixes (ps_a.serialize x) empty)
+  [SMTPat ((ps_prefix_to_ps_whole ps_a).serialize x)]
 
 val ps_prefix_to_ps_whole_is_well_formed:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
@@ -514,6 +523,7 @@ val ps_whole_to_bare_ps_prefix_serialize:
   len:nat -> ps_a:parser_serializer_whole bytes a{forall x. length (ps_a.serialize x) == len} ->
   x:a ->
   Lemma ((ps_whole_to_bare_ps_prefix len ps_a).serialize x == [ps_a.serialize x])
+  [SMTPat ((ps_whole_to_bare_ps_prefix len ps_a).serialize x)]
 
 type nat_parser_serializer (bytes:Type0) {| bytes_like bytes |} (pre_length:nat -> bool)= ps:parser_serializer bytes (refined nat pre_length){forall pre n. is_well_formed_prefix ps pre n}
 
@@ -529,6 +539,7 @@ val ps_whole_to_ps_prefix_serialize:
   ps_a:parser_serializer_whole bytes a{forall x. length_pre (length (ps_a.serialize x))} ->
   x:a ->
   Lemma ((ps_whole_to_ps_prefix length_pre ps_length ps_a).serialize x == (ps_length.serialize (length (ps_a.serialize x))) @ [ps_a.serialize x])
+  [SMTPat ((ps_whole_to_ps_prefix length_pre ps_length ps_a).serialize x)]
 
 val ps_whole_to_ps_prefix_is_well_formed:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
@@ -554,6 +565,7 @@ val ps_whole_bytes_serialize:
   #bytes:Type0 -> {|bytes_like bytes|} ->
   b:bytes ->
   Lemma ((ps_whole_bytes #bytes).serialize b == b)
+  [SMTPat ((ps_whole_bytes #bytes).serialize b)]
 
 val ps_whole_list:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
@@ -565,6 +577,7 @@ val ps_whole_list_serialize:
   ps_a:parser_serializer bytes a ->
   x:list a ->
   Lemma ((ps_whole_list ps_a).serialize x == List.Tot.fold_right add_prefixes (List.Tot.map (ps_a.serialize) x) empty)
+  [SMTPat ((ps_whole_list ps_a).serialize x)]
 
 val ps_whole_list_is_well_formed:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
@@ -603,6 +616,7 @@ val ps_pre_length_bytes_serialize:
   pre_length:(nat -> bool) -> ps_length:nat_parser_serializer bytes pre_length ->
   x:pre_length_bytes bytes pre_length ->
   Lemma ((ps_pre_length_bytes pre_length ps_length).serialize x == (ps_length.serialize (length #bytes x)) @ [x])
+  [SMTPat ((ps_pre_length_bytes pre_length ps_length).serialize x)]
 
 val ps_pre_length_bytes_is_well_formed:
   #bytes:Type0 -> {|bytes_like bytes|} ->
@@ -626,6 +640,7 @@ val ps_pre_length_list_serialize:
   ps_a:parser_serializer bytes a ->
   x:pre_length_list ps_a pre_length ->
   Lemma ((ps_pre_length_list pre_length ps_length ps_a).serialize x == (ps_length.serialize (bytes_length ps_a x)) @ [List.Tot.fold_right add_prefixes (List.Tot.map (ps_a.serialize) x) empty])
+  [SMTPat ((ps_pre_length_list pre_length ps_length ps_a).serialize x)]
 
 val ps_pre_length_list_is_well_formed:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
@@ -682,6 +697,7 @@ val ps_tls_nat_serialize:
   r:size_range ->
   x:tls_nat r ->
   Lemma ((ps_tls_nat #bytes r).serialize x == [from_nat (find_nbytes r.max) x])
+  [SMTPat ((ps_tls_nat #bytes r).serialize x)]
 
 val ps_tls_nat_length: #bytes:Type0 -> {|bytes_like bytes|} -> r:size_range -> x:tls_nat r -> Lemma
   (prefixes_length #bytes ((ps_tls_nat r).serialize x) == find_nbytes r.max)
