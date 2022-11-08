@@ -467,12 +467,12 @@ let refined_ind a pred p _ = ()
 val or_split: b1:bool -> b2:bool -> (p:(squash (b1 || b2) -> Type0)) -> squash (b1 ==> p ()) -> squash (b2 ==> p ()) -> squash (b1 || b2 ==> p ())
 let or_split b1 b2 p _ _ = ()
 
-val eq_to_eq: a:eqtype -> x:a -> y:a -> p:Type0 -> squash (x == y ==> p) -> squash (x = y ==> p)
+val eq_to_eq: a:eqtype -> x:a -> y:a -> p:(squash (x == y) -> Type0) -> squash (x == y ==> p ()) -> squash (x = y ==> p ())
 let eq_to_eq a x y p _ = ()
 
-val add_squash: p:Type0 -> q:Type0 -> squash (squash p ==> q) -> squash (p ==> q)
+val add_squash: p:Type0 -> q:(squash p -> Type0) -> squash (squash p ==> q ()) -> squash (p ==> q ())
 let add_squash p q _ =
-  introduce p ==> q with _. ()
+  introduce p ==> q () with _. ()
 
 val remove_refine: a:Type0 -> p:(a -> Type0) -> q:(a -> Type0) -> squash (forall (x:a). q x) -> squash (forall (x:a{p x}). q x)
 let remove_refine a p q _ = ()
