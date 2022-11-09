@@ -458,6 +458,18 @@ val isomorphism_whole_is_well_formed:
   (is_well_formed_whole (isomorphism_whole ps_a iso) pre xb <==> is_well_formed_whole ps_a pre (iso.b_to_a xb))
   [SMTPat (is_well_formed_whole (isomorphism_whole ps_a iso) pre xb)]
 
+/// This helper function is extremely valuable to help F*'s type inference.
+/// Using it, F* is able to automatically deduce the type of `a`, which is often ugly.
+/// (This is in general why you use `isomorphism`: because you want to replace the ugly `a` with a nicer `b`)
+let mk_isomorphism_whole
+  (#bytes:Type0) {| bytes_like bytes |} (#a:Type) (b:Type)
+  (ps_a:parser_serializer_whole bytes a) (a_to_b:a -> b) (b_to_a:b -> a):
+  Pure (parser_serializer_whole bytes b)
+    (requires (forall x. a_to_b (b_to_a x) == x) /\ (forall x. b_to_a (a_to_b x) == x))
+    (ensures fun _ -> True)
+  =
+  isomorphism_whole ps_a (mk_isomorphism_between a_to_b b_to_a)
+
 let mk_trivial_isomorphism_whole
   (#bytes:Type0) {| bytes_like bytes |} (#a:Type) (#b:Type)
   (ps_a:parser_serializer_whole bytes a):
