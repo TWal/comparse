@@ -13,11 +13,6 @@ let rec for_allP_eq #a pre l =
   | h::t -> for_allP_eq pre t
 #pop-options
 
-let rec add_prefixes #bytes #bl l suffix =
-  match l with
-  | [] -> suffix
-  | h::t -> concat h ((add_prefixes t suffix))
-
 let rec prefixes_length #bytes #bl l =
   match l with
   | [] -> 0

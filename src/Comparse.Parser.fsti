@@ -16,7 +16,8 @@ val for_allP_eq: #a:Type -> pre:(a -> prop) -> l:list a ->
 
 ///   add_prefixes [prefix0; prefix1; ...; prefixn] suffix
 /// = concat prefix0 (concat prefix1 (... (concat prefixn suffix)))`
-val add_prefixes: #bytes:Type0 -> {|bytes_like bytes|} -> list (bytes) -> bytes -> bytes
+let add_prefixes (#bytes:Type) {|bytes_like bytes|} (prefixes:list bytes) (suffix:bytes): bytes =
+  List.Tot.fold_right (concat #bytes) prefixes suffix
 
 val prefixes_length: #bytes:Type0 -> {|bytes_like bytes|} -> list (bytes) -> nat
 
