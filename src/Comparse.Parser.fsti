@@ -652,7 +652,7 @@ val ps_pre_length_list_serialize:
   pre_length:(nat -> bool) -> ps_length:nat_parser_serializer bytes pre_length ->
   ps_a:parser_serializer bytes a ->
   x:pre_length_list ps_a pre_length ->
-  Lemma ((ps_pre_length_list pre_length ps_length ps_a).serialize x == (ps_length.serialize (bytes_length ps_a x)) @ [List.Tot.fold_right add_prefixes (List.Tot.map (ps_a.serialize) x) empty])
+  Lemma ((ps_pre_length_list pre_length ps_length ps_a).serialize x == (ps_length.serialize (length ((ps_whole_list ps_a).serialize x))) @ [(ps_whole_list ps_a).serialize x])
   [SMTPat ((ps_pre_length_list pre_length ps_length ps_a).serialize x)]
 
 val ps_pre_length_list_is_well_formed:

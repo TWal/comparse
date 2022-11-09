@@ -656,8 +656,6 @@ let ps_pre_length_list #bytes #bl #a pre_length ps_length ps_a =
   ps_whole_to_ps_prefix pre_length ps_length (ps_whole_pre_length_list pre_length ps_a)
 
 let ps_pre_length_list_serialize #bytes #bl #a pre_length ps_length ps_a x =
-  ps_whole_list_length ps_a x;
-  ps_whole_list_serialize ps_a x;
   ps_whole_to_ps_prefix_serialize pre_length ps_length (ps_whole_pre_length_list pre_length ps_a) x
 
 let ps_pre_length_list_is_well_formed #bytes #bl #a pre_length ps_length ps_a pre x =
