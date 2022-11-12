@@ -78,6 +78,37 @@ let l_to_r_breq l =
   in
   ctrl_rewrite BottomUp ctrl rw
 
+// A subtle different variation
+val l_to_r_breq_nosquash: list term -> Tac unit
+let l_to_r_breq_nosquash l =
+  let equality =
+    match l with
+    | [x] -> x
+    | _ -> fail ""
+  in
+  let equality_ty = (tc (cur_env ()) equality) in
+  let x_term =
+      let eq2_term, args = collect_app equality_ty in
+      guard (eq2_term `term_fv_eq` (`eq2));
+      guard (List.Tot.length args = 3);
+      let [_; (x_term, _); _] = args in
+      guard (Tv_Var? (inspect x_term));
+      x_term
+  in
+  let ctrl (t:term) : Tac (bool & ctrl_flag) =
+    let res =
+      match inspect t with
+      | Tv_Var _ -> t `term_eq` x_term
+      | _ -> false
+    in
+    res, Continue
+  in
+  let rw () : Tac unit =
+    apply (`FStar.Squash.return_squash);
+    apply equality
+  in
+  ctrl_rewrite BottomUp ctrl rw
+
 val foldr1: #a:Type -> (a -> a -> Tac a) -> list a -> Tac a
 let rec foldr1 #a f l =
   match l with
@@ -92,3 +123,16 @@ let rec map2 #a #b #c f la lb =
   | ha::ta, hb::tb ->
     (f ha hb)::(map2 f ta tb)
   | _, _ -> fail "map2: unconsistent length"
+
+private
+val my_arrow_to_impl: #a:Type0 -> #b:(squash a -> Type0) -> (squash a -> (squash (b ()))) -> (a ==> b ())
+let my_arrow_to_impl #a #b f = FStar.Squash.squash_double_arrow (FStar.Squash.return_squash (fun x -> f (FStar.Squash.return_squash x)))
+
+private
+val imp_intro_lem : (#a:Type0) -> (#b : (squash a -> Type0)) -> (a -> squash (b ())) -> Lemma (a ==> b ())
+let imp_intro_lem #a #b f =
+  FStar.Classical.give_witness (my_arrow_to_impl (fun (x:squash a) -> FStar.Squash.bind_squash x f))
+
+let implies_intro () : Tac binder =
+  apply_lemma (`imp_intro_lem);
+  intro ()

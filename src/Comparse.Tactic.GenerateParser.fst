@@ -1,10 +1,10 @@
 module Comparse.Tactic.GenerateParser
 
+open FStar.Tactics
 open Comparse.Bytes.Typeclass
 open Comparse.Parser
 open Comparse.Tactic.Attributes
 open Comparse.Tactic.Utils
-open FStar.Tactics
 
 (*** Handle annotations in binders ***)
 
@@ -470,9 +470,9 @@ let or_split b1 b2 p _ _ = ()
 val eq_to_eq: a:eqtype -> x:a -> y:a -> p:(squash (x == y) -> Type0) -> squash (x == y ==> p ()) -> squash (x = y ==> p ())
 let eq_to_eq a x y p _ = ()
 
-val add_squash: p:Type0 -> q:(squash p -> Type0) -> squash (squash p ==> q ()) -> squash (p ==> q ())
-let add_squash p q _ =
-  introduce p ==> q () with _. ()
+//val add_squash: p:Type0 -> q:(squash p -> Type0) -> squash (squash p ==> q ()) -> squash (p ==> q ())
+//let add_squash p q _ =
+//  introduce p ==> q () with _. ()
 
 val remove_refine: a:Type0 -> p:(a -> Type0) -> q:(a -> Type0) -> squash (forall (x:a). q x) -> squash (forall (x:a{p x}). q x)
 let remove_refine a p q _ = ()
@@ -488,9 +488,8 @@ let prove_pair_sum_pair_isomorphism () =
   norm [primops; iota];
   let solve_one_goal () =
     apply (`eq_to_eq);
-    apply (`add_squash);
     let x_eq_term = binder_to_term (implies_intro ()) in
-    l_to_r_breq [x_eq_term];
+    l_to_r_breq_nosquash [x_eq_term];
     let _ = repeat (fun () ->
       apply_lemma (`dtuple2_ind);
       let _ = forall_intro () in
