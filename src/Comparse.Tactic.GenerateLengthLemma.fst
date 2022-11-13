@@ -9,8 +9,10 @@ val mk_lemma_type_ensures: GenerateParser.bytes_impl -> term -> term -> list cto
 let mk_lemma_type_ensures bi ps_term x_term ctors =
   let (opt_tag_parser, tag_opt_vals) =
     if GenerateParser.is_tagged_type ctors then (
-      let (tag_typ, tag_vals) = GenerateParser.get_tag_from_ctors ctors in
-      (Some (fst (GenerateParser.parser_from_type bi tag_typ)), List.Tot.map Some tag_vals)
+      let is_closed_ctor_flags = Tactics.Util.map GenerateParser.is_closed_ctor ctors in
+      let closed_ctors = Tactics.Util.filter GenerateParser.is_closed_ctor ctors in
+      let (tag_typ, tag_vals) = GenerateParser.get_tag_from_ctors closed_ctors in
+      (Some (fst (GenerateParser.parser_from_type bi tag_typ)), fit_in is_closed_ctor_flags tag_vals)
     ) else (
       (None, List.Tot.map (fun _ -> None) ctors)
     )
@@ -33,16 +35,20 @@ let mk_lemma_type_ensures bi ps_term x_term ctors =
       let (ps_b, _) = GenerateParser.parser_from_binder bi b in
       term_to_length ps_b (binder_to_term b)
     in
-    let binders_length = Tactics.Util.map binder_to_length binders in
     let all_lengthes =
-      match opt_tag_parser, opt_tag_val with
-      | Some tag_parser, Some tag_val -> (
-        (term_to_length tag_parser tag_val)::binders_length
+      match opt_tag_parser, GenerateParser.is_open_ctor c, opt_tag_val with
+      | Some tag_parser, true, None -> (
+        match binders with
+        | [b] -> [term_to_length tag_parser (binder_to_term b)]
+        | _ -> fail "mk_lemma_type_ensures: malformed open constructor"
       )
-      | None, None -> (
-        binders_length
+      | Some tag_parser, false, Some tag_val -> (
+        (term_to_length tag_parser tag_val)::(Tactics.Util.map binder_to_length binders)
       )
-      | _, _ -> fail "mk_lemma_type_ensures: shouldn't happen ?!"
+      | None, false, None -> (
+        Tactics.Util.map binder_to_length binders
+      )
+      | _, _, _ -> fail "mk_lemma_type_ensures: shouldn't happen ?!"
     in let branch_term = foldr1 (fun b_len acc -> (`((`#b_len) + (`#acc)))) all_lengthes in
     (branch_pattern, branch_term)
   in

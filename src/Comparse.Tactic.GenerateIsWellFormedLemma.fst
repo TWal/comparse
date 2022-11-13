@@ -18,16 +18,20 @@ let mk_lemma_type_ensures bi ps_term pre_term x_term ctors =
         ) binders
       )
     in
-    let all_well_formness_terms = Tactics.Util.map (fun b ->
-      let (ps_b, _) = GenerateParser.parser_from_binder bi b in
-      (`(is_well_formed_prefix (`#ps_b) (`#pre_term) (`#(binder_to_term b))))
-    ) binders in
-    let branch_term =
-      match all_well_formness_terms with
-      | [] -> (`True)
-      | _ -> foldr1 (fun cur_wf_term acc -> (`((`#cur_wf_term) /\ (`#acc)))) all_well_formness_terms
-    in
-    (branch_pattern, branch_term)
+    if GenerateParser.is_open_ctor c then
+      (branch_pattern, (`True))
+    else (
+      let all_well_formness_terms = Tactics.Util.map (fun b ->
+        let (ps_b, _) = GenerateParser.parser_from_binder bi b in
+        (`(is_well_formed_prefix (`#ps_b) (`#pre_term) (`#(binder_to_term b))))
+      ) binders in
+      let branch_term =
+        match all_well_formness_terms with
+        | [] -> (`True)
+        | _ -> foldr1 (fun cur_wf_term acc -> (`((`#cur_wf_term) /\ (`#acc)))) all_well_formness_terms
+      in
+      (branch_pattern, branch_term)
+    )
   in
   let lhs = `(is_well_formed_prefix (`#ps_term) (`#pre_term) (`#x_term)) in
   let rhs = pack (Tv_Match x_term None (Tactics.Util.map ctor_to_branch ctors)) in

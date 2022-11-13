@@ -235,6 +235,30 @@ type test_tag_simple =
 %splice [ps_test_tag_simple_serialize] (gen_serialize_lemma (`test_tag_simple))
 #pop-options
 
+type test_open_enum =
+  | [@@@ with_num_tag 1 0] TestOpenEnum0: test_open_enum
+  | [@@@ with_num_tag 1 1] TestOpenEnum1: test_open_enum
+  | [@@@ with_num_tag 1 2] TestOpenEnum2: test_open_enum
+  | [@@@ with_num_tag 1 3] TestOpenEnum3: test_open_enum
+  | [@@@ with_num_tag 1 4] TestOpenEnum4: test_open_enum
+  | [@@@     open_tag    ] TestOpenEnumOther: n:nat_lbytes 1{4 < n} -> test_open_enum
+
+#push-options "--fuel 0 --ifuel 1"
+%splice [ps_test_open_enum] (gen_parser (`test_open_enum))
+#pop-options
+
+#push-options "--fuel 0 --ifuel 1"
+%splice [ps_test_open_enum_is_well_formed] (gen_is_well_formed_lemma (`test_open_enum))
+#pop-options
+
+#push-options "--fuel 0 --ifuel 1"
+%splice [ps_test_open_enum_length] (gen_length_lemma (`test_open_enum))
+#pop-options
+
+#push-options "--fuel 0 --ifuel 1"
+%splice [ps_test_open_enum_serialize] (gen_serialize_lemma (`test_open_enum))
+#pop-options
+
 noeq type test_sum_no_annot (bytes:Type0) {|bytes_like bytes|} =
   | TestSumNoAnnot_1: test_ni -> test_ei bytes -> test_sum_no_annot bytes
   | TestSumNoAnnot_2: test_ni -> test_sum_no_annot bytes

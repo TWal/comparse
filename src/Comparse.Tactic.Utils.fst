@@ -124,6 +124,16 @@ let rec map2 #a #b #c f la lb =
     (f ha hb)::(map2 f ta tb)
   | _, _ -> fail "map2: unconsistent length"
 
+val fit_in: #a:Type -> list bool -> list a -> Tac (list (option a))
+let rec fit_in #a lbool la =
+  match lbool with
+  | [] -> []
+  | false::tbool -> None::(fit_in tbool la)
+  | true::tbool ->
+    match la with
+    | [] -> fail "fit_in: la too small"
+    | ha::ta -> (Some ha)::(fit_in tbool ta)
+
 private
 val my_arrow_to_impl: #a:Type0 -> #b:(squash a -> Type0) -> (squash a -> (squash (b ()))) -> (a ==> b ())
 let my_arrow_to_impl #a #b f = FStar.Squash.squash_double_arrow (FStar.Squash.return_squash (fun x -> f (FStar.Squash.return_squash x)))

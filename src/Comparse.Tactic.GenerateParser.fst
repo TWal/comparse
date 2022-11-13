@@ -360,7 +360,7 @@ let get_tag_from_ctors ctors =
     let pack_int i = pack (Tv_Const (C_Int i)) in
     (mk_e_app (`nat_lbytes) [pack_int nbytes], Tactics.Util.mapi (fun i _ -> pack_int i) ctors)
   ) else (
-    fail "Inconsistent tag annotation"
+    fail "get_tag_from_ctors: inconsistent tag annotation"
   )
 
 val mk_tag_parser: bytes_impl -> typ -> list term -> Tac parser_term
@@ -556,6 +556,119 @@ let mk_sum_type_parser bi ctors result_type =
   let (middle_sum_type_parser_term, tag_to_pair_typ) = mk_middle_sum_type_parser bi tag_parser_term tag_vals ctors in
   mk_sum_isomorphism bi tag_typ result_type tag_to_pair_typ tag_vals ctors middle_sum_type_parser_term
 
+(*** Parser for open enum ***)
+
+irreducible let open_tag = ()
+
+val is_open_ctor: ctor -> Tac bool
+let is_open_ctor (ctor_name, _) =
+  match lookup_typ (top_env ()) ctor_name with
+  | Some sigelt -> (
+    let attrs = sigelt_attrs sigelt in
+    match find_annotation_in_list attrs (`open_tag) with
+    | Some [] ->
+      true
+    | Some _ -> fail "is_open_ctor: malformed annotation"
+    | None -> false
+  )
+  | None -> fail "is_open_ctor: cannot find ctor type?"
+
+val is_closed_ctor: ctor -> Tac bool
+let is_closed_ctor c =
+  not (is_open_ctor c)
+
+val is_open_enum: list ctor -> Tac bool
+let is_open_enum ctors =
+  1 <= List.Tot.length (Tactics.Util.filter is_open_ctor ctors)
+
+val get_closed_and_open_ctors: list ctor -> Tac (list ctor & option ctor)
+let get_closed_and_open_ctors ctors =
+  let closed_ctors = Tactics.Util.filter (fun ctor -> not (is_open_ctor ctor)) ctors in
+  let open_ctor =
+    match Tactics.Util.filter is_open_ctor ctors with
+    | [res] -> Some res
+    | [] -> None
+    | _ -> fail "get_closed_and_open_ctors: too many open ctor"
+  in
+  (closed_ctors, open_ctor)
+
+val mk_tag_to_open_enum: typ -> list ctor -> ctor -> Tac term
+let mk_tag_to_open_enum tag_typ ctors open_ctor =
+  let branches_closed =
+    Tactics.Util.map
+      (fun ctor ->
+        let (ctor_name, _) = ctor in
+        let opt_tag = get_tag_from_ctor ctor in
+        guard (Some? opt_tag);
+        let (tag_typ, tag_val) = Some?.v opt_tag in
+        (term_to_pattern tag_val, pack (Tv_FVar (pack_fv ctor_name)))
+      )
+      ctors
+  in
+  let branch_open =
+    let tag_bv = fresh_bv tag_typ in
+    let (open_ctor_name, _) = open_ctor in
+    (Pat_Var tag_bv, mk_e_app (pack (Tv_FVar (pack_fv open_ctor_name))) [pack (Tv_Var tag_bv)])
+  in
+  let branches = branches_closed @ [branch_open] in
+  let tag_bv = fresh_bv tag_typ in
+  pack (Tv_Abs (mk_binder tag_bv) (pack (Tv_Match (pack (Tv_Var tag_bv)) None branches)))
+
+val mk_open_enum_to_tag: typ -> typ -> list ctor -> ctor -> Tac term
+let mk_open_enum_to_tag tag_typ open_enum_typ ctors open_ctor =
+  let branches_closed =
+    Tactics.Util.map
+      (fun ctor ->
+        let (ctor_name, _) = ctor in
+        let opt_tag = get_tag_from_ctor ctor in
+        guard (Some? opt_tag);
+        let (tag_typ, tag_val) = Some?.v opt_tag in
+        (Pat_Cons (pack_fv ctor_name) None [], tag_val)
+      )
+      ctors
+  in
+  let branch_open =
+    let tag_bv = fresh_bv tag_typ in
+    let (open_ctor_name, _) = open_ctor in
+    (Pat_Cons (pack_fv open_ctor_name) None [Pat_Var tag_bv, false], pack (Tv_Var tag_bv))
+  in
+  let branches = branches_closed @ [branch_open] in
+  let x_bv = fresh_bv open_enum_typ in
+  pack (Tv_Abs (mk_binder x_bv) (pack (Tv_Match (pack (Tv_Var x_bv)) None branches)))
+
+val mk_open_enum_isomorphism: bytes_impl -> parser_term -> typ -> list ctor -> ctor -> Tac parser_term
+let mk_open_enum_isomorphism bi (tag_parser, tag_typ) open_enum_typ ctors open_ctor =
+  let tag_to_open_def = mk_tag_to_open_enum tag_typ ctors open_ctor in
+  let open_to_tag_def = mk_open_enum_to_tag tag_typ open_enum_typ ctors open_ctor in
+  let the_isomorphism =
+    mk_ie_app (`Mkisomorphism_between) [
+      tag_typ;
+      open_enum_typ;
+    ] [
+      tag_to_open_def;
+      open_to_tag_def;
+      (`(fun _ -> ())); // Meh do the proof by SMT
+      (`(fun _ -> ()));
+    ]
+  in
+  let open_enum_parser = mk_ie_app (apply_implicit_bytes_impl (`isomorphism) bi) [
+    tag_typ;
+    open_enum_typ;
+  ] [
+    tag_parser;
+    the_isomorphism;
+  ] in
+  (open_enum_parser, open_enum_typ)
+
+val mk_open_enum_parser: bytes_impl -> list ctor -> typ -> Tac parser_term
+let mk_open_enum_parser bi ctors result_typ =
+  let (closed_ctors, opt_open_ctor) = get_closed_and_open_ctors ctors in
+  guard (Some? opt_open_ctor);
+  let Some open_ctor = opt_open_ctor in
+  let (tag_typ, _) = get_tag_from_ctors closed_ctors in
+  let tag_parser_term = parser_from_type bi tag_typ in
+  mk_open_enum_isomorphism bi tag_parser_term result_typ closed_ctors open_ctor
+
 (*** Parser for computed type ***)
 
 val substitute_parser_in_term: bytes_impl -> term -> Tac term
@@ -640,7 +753,11 @@ let gen_parser_fun parser_ty type_fv =
       let result_parsed_type = apply_binders type_fv params in
       let (parser_fun_body, _) =
         if is_tagged_type constructors then (
-          mk_sum_type_parser bi constructors result_parsed_type
+          if is_open_enum constructors then (
+            mk_open_enum_parser bi constructors result_parsed_type
+          ) else (
+            mk_sum_type_parser bi constructors result_parsed_type
+          )
         ) else (
           guard (Cons? constructors);
           mk_record_parser bi (Cons?.hd constructors) result_parsed_type
