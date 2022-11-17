@@ -538,6 +538,14 @@ val ps_whole_to_bare_ps_prefix_serialize:
   Lemma ((ps_whole_to_bare_ps_prefix len ps_a).serialize x == [ps_a.serialize x])
   [SMTPat ((ps_whole_to_bare_ps_prefix len ps_a).serialize x)]
 
+val ps_whole_to_bare_ps_prefix_is_not_unit:
+  #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
+  len:nat -> ps_a:parser_serializer_whole bytes a{forall x. length (ps_a.serialize x) == len} ->
+  Lemma
+  (requires 1 <= len)
+  (ensures is_not_unit (ps_whole_to_bare_ps_prefix len ps_a))
+  [SMTPat (is_not_unit (ps_whole_to_bare_ps_prefix len ps_a))]
+
 type nat_parser_serializer (bytes:Type0) {| bytes_like bytes |} (pre_length:nat -> bool)= ps:parser_serializer bytes (refined nat pre_length){forall pre n. is_well_formed_prefix ps pre n}
 
 val ps_whole_to_ps_prefix:
@@ -611,6 +619,30 @@ val ps_whole_list_length:
   Lemma (length ((ps_whole_list ps_a).serialize l) == bytes_length ps_a l)
   [SMTPat (length ((ps_whole_list ps_a).serialize l))]
 
+let char_is_ascii (x:FStar.Char.char) = FStar.Char.int_of_char x < 256
+let string_is_ascii (s:string) = List.Tot.for_all char_is_ascii (FStar.String.list_of_string s)
+type ascii_string = s:string{normalize_term (b2t (string_is_ascii s))}
+let ascii_char_to_byte (c:FStar.Char.char{char_is_ascii c}): nat_lbytes 1 = FStar.Char.int_of_char c
+
+val ps_whole_ascii_string:
+  #bytes:Type0 -> {|bytes_like bytes|} ->
+  parser_serializer_whole bytes ascii_string
+
+val ps_whole_ascii_string_serialize:
+  #bytes:Type0 -> {|bytes_like bytes|} ->
+  x:ascii_string ->
+  Lemma ((ps_whole_ascii_string #bytes).serialize x ==
+    (ps_whole_list (ps_nat_lbytes 1)).serialize (
+      List.Tot.map ascii_char_to_byte (List.Tot.list_refb #_ #char_is_ascii (FStar.String.list_of_string x))
+    )
+  )
+  [SMTPat ((ps_whole_ascii_string #bytes).serialize x)]
+
+val ps_whole_ascii_string_length:
+  #bytes:Type0 -> {|bytes_like bytes|} ->
+  x:ascii_string ->
+  Lemma (length ((ps_whole_ascii_string #bytes).serialize x) == FStar.String.strlen x)
+  [SMTPat (length ((ps_whole_ascii_string #bytes).serialize x))]
 
 (*** Parser for variable-length bytes / lists ***)
 

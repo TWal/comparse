@@ -481,6 +481,10 @@ let ps_whole_to_bare_ps_prefix #bytes #bl #a len ps_a =
 
 let ps_whole_to_bare_ps_prefix_serialize #bytes #bl #a len ps_a x = ()
 
+#push-options "--fuel 1 --ifuel 0"
+let ps_whole_to_bare_ps_prefix_is_not_unit #bytes #bl #a len ps_a = ()
+#pop-options
+
 let ps_whole_to_ps_prefix #bytes #bl #a length_pre ps_nat ps_a =
   let b (sz:refined nat length_pre) = refined a (ps_whole_length_pred ps_a sz) in
   mk_isomorphism a
@@ -627,6 +631,135 @@ let rec ps_whole_list_length #bytes #bl #a ps_a l =
     ps_whole_list_length ps_a t
 #pop-options
 
+#push-options "--fuel 1"
+val list_unrefb: #a:Type -> #p:(a -> bool) -> list (x:a {p x}) -> l:list a {List.Tot.for_all p l}
+let rec list_unrefb #a #p l =
+  match l with
+  | [] -> []
+  | h::t -> h::(list_unrefb t)
+#pop-options
+
+#push-options "--ifuel 1 --fuel 1"
+val list_refb_unrefb:
+  #a:eqtype -> #p:(a -> bool) ->
+  l:list (x:a {p x}) ->
+  Lemma (list_refb #a #p (list_unrefb #a #p l) == l)
+let rec list_refb_unrefb #a #p l =
+  match l with
+  | [] -> (
+    assert_norm(list_unrefb #a #p (list_refb #a #p []) == [])
+  )
+  | h::t -> (
+    list_refb_unrefb #a #p t;
+    assert_norm(list_refb #a #p (list_unrefb #a #p (h::t)) == h::(list_refb #a #p (list_unrefb #a #p t)))
+  )
+#pop-options
+
+#push-options "--ifuel 1 --fuel 1"
+val list_unrefb_refb:
+  #a:eqtype -> #p:(a -> bool) ->
+  l:list a{for_all p l} ->
+  Lemma (list_unrefb #a #p (list_refb #a #p l) == l)
+let rec list_unrefb_refb #a #p l =
+  match l with
+  | [] -> ()
+  | h::t -> list_unrefb_refb #a #p t
+#pop-options
+
+#push-options "--ifuel 1 --fuel 1"
+val isomorphism_between_list: #a:Type -> #b:Type -> isomorphism_between a b -> isomorphism_between (list a) (list b)
+let isomorphism_between_list #a #b iso =
+  let a_to_b (l:list a): list b = List.Tot.map iso.a_to_b l in
+  let b_to_a (l:list b): list a = List.Tot.map iso.b_to_a l in
+  let rec a_to_b_to_a (l:list a): squash (b_to_a (a_to_b l) == l) =
+    match l with
+    | [] -> ()
+    | h::t -> (
+      iso.a_to_b_to_a h;
+      a_to_b_to_a t
+    )
+  in
+  let rec b_to_a_to_b (l:list b): squash (a_to_b (b_to_a l) == l) =
+    match l with
+    | [] -> ()
+    | h::t -> (
+      iso.b_to_a_to_b h;
+      b_to_a_to_b t
+    )
+  in
+  {
+    a_to_b;
+    b_to_a;
+    a_to_b_to_a;
+    b_to_a_to_b;
+  }
+#pop-options
+
+let ps_whole_ascii_string #bytes #bl =
+  let ascii_string_nonorm = s:string{string_is_ascii s} in
+  let list_char_is_ascii (l: list FStar.Char.char) = List.Tot.for_all char_is_ascii l in
+  let list_ascii_char = l: list FStar.Char.char{list_char_is_ascii l} in
+  let ps_list_ascii_char =
+    isomorphism_whole (ps_whole_list #bytes (ps_nat_lbytes 1)) (
+      isomorphism_between_list {
+        a_to_b = (fun (x:nat_lbytes 1) -> (FStar.Char.char_of_int x <: (c:FStar.Char.char{char_is_ascii c})));
+        b_to_a = ascii_char_to_byte;
+        a_to_b_to_a = (fun x -> FStar.Char.u32_of_char_of_u32 (FStar.UInt32.uint_to_t x));
+        b_to_a_to_b = (fun x -> FStar.Char.char_of_u32_of_char x);
+      }
+    )
+  in
+  let ps_list_ascii_char' =
+    mk_trivial_isomorphism_whole (
+      isomorphism_whole ps_list_ascii_char ({
+        a_to_b = (fun (x:list (c:FStar.Char.char{char_is_ascii c})) ->
+          list_unrefb #FStar.Char.char #char_is_ascii x
+        );
+        b_to_a = (fun (x:list_ascii_char) ->
+          list_refb #FStar.Char.char #char_is_ascii x
+        );
+        a_to_b_to_a = (fun x -> list_refb_unrefb #FStar.Char.char #char_is_ascii x);
+        b_to_a_to_b = (fun x -> list_unrefb_refb #FStar.Char.char #char_is_ascii x);
+      })
+    )
+  in
+  let ps_ascii_string_nonorm =
+    isomorphism_whole ps_list_ascii_char' ({
+      a_to_b = (fun (x:list_ascii_char) ->
+        FStar.String.list_of_string_of_list x;
+        (FStar.String.string_of_list x) <: ascii_string_nonorm
+      );
+      b_to_a = (fun (x:ascii_string_nonorm) ->
+        FStar.String.list_of_string x
+      );
+      a_to_b_to_a = (fun x -> FStar.String.list_of_string_of_list x);
+      b_to_a_to_b = (fun x -> FStar.String.string_of_list_of_string x);
+    })
+  in
+  assert_norm(forall x. string_is_ascii x <==> normalize_term (b2t (string_is_ascii x)));
+  mk_trivial_isomorphism_whole ps_ascii_string_nonorm
+
+#push-options "--fuel 1 --ifuel 1"
+let ps_whole_ascii_string_serialize #bytes #bl x =
+  assert_norm ((ps_whole_ascii_string #bytes).serialize x ==
+    (ps_whole_list (ps_nat_lbytes 1)).serialize (
+      List.Tot.map ascii_char_to_byte (List.Tot.list_refb #_ #char_is_ascii (FStar.String.list_of_string x))
+    )
+  )
+#pop-options
+
+#push-options "--fuel 1 --ifuel 1"
+let ps_whole_ascii_string_length #bytes #bl x =
+  let rec lem (l:list (nat_lbytes 1)): Lemma (bytes_length #bytes (ps_nat_lbytes 1) l == List.Tot.length l) =
+    match l with
+    | [] -> ()
+    | h::t -> lem t
+  in
+  ps_whole_ascii_string_serialize #bytes x;
+  let the_list = (List.Tot.map ascii_char_to_byte (List.Tot.list_refb #_ #char_is_ascii (FStar.String.list_of_string x))) in
+  ps_whole_list_length #bytes (ps_nat_lbytes 1) the_list;
+  lem the_list
+#pop-options
 
 (*** Parser for variable-length lists ***)
 
