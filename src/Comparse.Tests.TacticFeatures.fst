@@ -474,7 +474,7 @@ noeq type test_dependent_sum (bytes:Type0) {|bytes_like bytes|} =
 %splice [ps_test_dependent_sum_length] (gen_length_lemma (`test_dependent_sum))
 #pop-options
 
-#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0' --z3rlimit 50"
 %splice [ps_test_dependent_sum_serialize] (gen_serialize_lemma (`test_dependent_sum))
 #pop-options
 

@@ -18,10 +18,11 @@ let
     buildInputs =
       [ which fstar z3 ]
       ++ (with ocamlPackages; [
-        ocaml dune_2 findlib
-        # fstarlib dependencies
-        batteries stdint zarith ppx_deriving_yojson
-      ]);
+        ocaml dune_3 findlib
+        # # fstarlib dependencies
+        # batteries stdint zarith ppx_deriving_yojson
+      ])
+      ++ (fstar.buildInputs);
     FSTAR_HOME = fstar;
     # pre-patch uses build output from comparse, to avoid building things twice
     prePatch = ''

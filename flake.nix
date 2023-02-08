@@ -1,24 +1,19 @@
 {
   inputs = {
     nixpkgs.url = "nixpkgs";
-    fstar-src = {
+    fstar_flake = {
       url = "github:FStarLang/FStar";
-      flake = false;
-    };
-
-    everest = {
-      url = github:project-everest/everest-nix?dir=projects;
-      inputs.fstar-src.follows = "fstar-src";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = {self, nixpkgs, fstar-src, everest}:
+  outputs = {self, nixpkgs, fstar_flake}:
   let
     system = "x86_64-linux";
     pkgs = import nixpkgs { inherit system; };
-    z3 = everest.packages.${system}.z3;
-    fstar = everest.packages.${system}.fstar;
-    comparse = pkgs.callPackage ./default.nix {inherit fstar z3; ocamlPackages = pkgs.ocaml-ng.ocamlPackages_4_12;};
+    z3 = fstar_flake.packages.${system}.z3;
+    fstar = fstar_flake.packages.${system}.fstar;
+    comparse = pkgs.callPackage ./default.nix {inherit fstar z3; ocamlPackages = pkgs.ocaml-ng.ocamlPackages_4_14;};
   in {
     packages.${system} = {
       inherit fstar comparse;

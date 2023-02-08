@@ -1,38 +1,12 @@
 {
   "nodes": {
-    "everest": {
-      "inputs": {
-        "flake-utils": "flake-utils",
-        "fstar-src": [
-          "fstar-src"
-        ],
-        "hacl-src": "hacl-src",
-        "karamel-src": "karamel-src",
-        "nixpkgs": "nixpkgs"
-      },
-      "locked": {
-        "dir": "projects",
-        "lastModified": 1658802835,
-        "narHash": "sha256-l0TrWbpWxdZ0tMkBn0EdejbvOV/tfP8rOV7aYO6gD2U=",
-        "owner": "project-everest",
-        "repo": "everest-nix",
-        "rev": "88e2d47e14a0964f7b22bfae3a1af54452418d33",
-        "type": "github"
-      },
-      "original": {
-        "dir": "projects",
-        "owner": "project-everest",
-        "repo": "everest-nix",
-        "type": "github"
-      }
-    },
     "flake-utils": {
       "locked": {
-        "lastModified": 1656928814,
-        "narHash": "sha256-RIFfgBuKz6Hp89yRr7+NR5tzIAbn52h8vT6vXkYjZoM=",
+        "lastModified": 1667395993,
+        "narHash": "sha256-nuEHfE/LcWyuSWnS8t12N1wc105Qtau+/OdUAjtQ0rA=",
         "owner": "numtide",
         "repo": "flake-utils",
-        "rev": "7e2a3b3dfd9af950a856d66b0a7d01e3c18aa249",
+        "rev": "5aed5285a952e0b949eb3ba02c12fa4fcfef535f",
         "type": "github"
       },
       "original": {
@@ -40,76 +14,34 @@
         "type": "indirect"
       }
     },
-    "fstar-src": {
-      "flake": false,
+    "fstar_flake": {
+      "inputs": {
+        "flake-utils": "flake-utils",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
       "locked": {
-        "lastModified": 1667855879,
-        "narHash": "sha256-tYlUO+0t//FNCkbdWGmipvGfqPDLnCh0Re/tyj+O9Ww=",
+        "lastModified": 1675658458,
+        "narHash": "sha256-F7AH3ORQhwWoVinDW+504a8IeSmq/qsiWEXziLzjkOg=",
         "owner": "FStarLang",
         "repo": "FStar",
-        "rev": "273679d3efa4e280c2a3822ac3cc9602cf098c17",
+        "rev": "7ead8bc9a4ec4b86e7f974a3e369cb6cb992556b",
         "type": "github"
       },
       "original": {
         "owner": "FStarLang",
         "repo": "FStar",
-        "type": "github"
-      }
-    },
-    "hacl-src": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1658765490,
-        "narHash": "sha256-/tyt0Ymm5djV6UbV4vyf1K9VCH2IV7zXjHlnNFCh5vw=",
-        "owner": "project-everest",
-        "repo": "hacl-star",
-        "rev": "0a58b6343c2dac2cd87a17f1ecb8233c3947f856",
-        "type": "github"
-      },
-      "original": {
-        "owner": "project-everest",
-        "repo": "hacl-star",
-        "type": "github"
-      }
-    },
-    "karamel-src": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1658765454,
-        "narHash": "sha256-4pJY4AAnL+i5W5+m/DIxub5KTP+6ReU47mrsgAp/nFo=",
-        "owner": "fstarlang",
-        "repo": "karamel",
-        "rev": "c82c6e06e544109e402d5178fd8956a5bcadbc49",
-        "type": "github"
-      },
-      "original": {
-        "owner": "fstarlang",
-        "repo": "karamel",
         "type": "github"
       }
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1658737577,
-        "narHash": "sha256-xosJ5nJT9HX+b6UWsSX6R+ap4AdZOCrl/r+IKFp2ASQ=",
+        "lastModified": 1675698036,
+        "narHash": "sha256-BgsQkQewdlQi8gapJN4phpxkI/FCE/2sORBaFcYbp/A=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "5a0e0d73b944157328d54c4ded1cf2f0146a86a5",
-        "type": "github"
-      },
-      "original": {
-        "id": "nixpkgs",
-        "ref": "nixos-unstable",
-        "type": "indirect"
-      }
-    },
-    "nixpkgs_2": {
-      "locked": {
-        "lastModified": 1659344384,
-        "narHash": "sha256-EQcTdYvTynl34FoVu52+oT5ov+Se9rJw6W/l0V1lUZY=",
-        "owner": "NixOS",
-        "repo": "nixpkgs",
-        "rev": "551e65e946d7261f956175845a739072dd2ac6e0",
+        "rev": "1046c7b92e908a1202c0f1ba3fc21d19e1cf1b62",
         "type": "github"
       },
       "original": {
@@ -119,9 +51,8 @@
     },
     "root": {
       "inputs": {
-        "everest": "everest",
-        "fstar-src": "fstar-src",
-        "nixpkgs": "nixpkgs_2"
+        "fstar_flake": "fstar_flake",
+        "nixpkgs": "nixpkgs"
       }
     }
   },

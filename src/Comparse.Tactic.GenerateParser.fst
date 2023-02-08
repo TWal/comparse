@@ -527,7 +527,7 @@ let mk_sum_isomorphism bi tag_typ result_typ tag_to_pair_typ tag_vals ctors (pai
   let middle_to_sum_def = mk_middle_to_sum_fun tag_typ tag_to_pair_typ tag_vals ctors in
   let sum_to_middle_def = mk_sum_to_middle_fun result_typ tag_vals ctors in
   let middle_typ = mk_e_app (`dtuple2) [tag_typ; tag_to_pair_typ] in
-  let mk_a_to_b (a:typ) (b:typ) = (pack (Tv_Arrow (fresh_binder a) (pack_comp (C_Total b u_unk [])))) in
+  let mk_a_to_b (a:typ) (b:typ) = (pack (Tv_Arrow (fresh_binder a) (pack_comp (C_Total b)))) in
   //We need to help F* with the type of things otherwise it is completely lost
   let ascribe_type (t:typ) (x:term) = mk_ie_app (`id) [t] [x] in
   let the_isomorphism = mk_ie_app (`Mkisomorphism_between) [
@@ -779,7 +779,7 @@ let gen_parser_fun parser_ty type_fv =
   let parser_fun = mk_abs parser_params parser_fun_body in
   let (bytes_term, bytes_like_term) = bi in
   let unparametrized_parser_type = mk_app parser_ty [bytes_term, Q_Explicit; bytes_like_term, Q_Implicit; result_parsed_type, Q_Explicit] in
-  let parser_type = mk_arr parser_params (pack_comp (C_Total unparametrized_parser_type u_unk [])) in
+  let parser_type = mk_arr parser_params (pack_comp (C_Total unparametrized_parser_type)) in
   (parser_type, parser_fun, is_opaque)
 
 val gen_parser_aux: term -> term -> Tac decls
