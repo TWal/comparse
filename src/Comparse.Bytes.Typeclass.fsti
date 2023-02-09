@@ -38,7 +38,7 @@ class bytes_like (bytes:Type0) = {
 
   split_concat: b1:bytes -> b2:bytes -> Lemma (split (concat b1 b2) (length b1) == Some (b1, b2));
 
-  concat_split: b:bytes -> i:nat{i <= length b} -> Lemma (
+  concat_split: b:bytes -> i:nat -> Lemma (
     match split b i with
     | Some (lhs, rhs) -> concat lhs rhs == b
     | _ -> True
@@ -95,7 +95,9 @@ let seq_u8_bytes_like: bytes_like (Seq.seq UInt8.t) = {
     assert(b2 `Seq.eq` (Seq.slice (Seq.append b1 b2) (Seq.length b1) (Seq.length (Seq.append b1 b2))))
   );
   concat_split = (fun b i ->
-    assert(b `Seq.eq` Seq.append (Seq.slice b 0 i) (Seq.slice b i (Seq.length b)))
+    if i <= Seq.length b then
+      assert(b `Seq.eq` Seq.append (Seq.slice b 0 i) (Seq.slice b i (Seq.length b)))
+    else ()
   );
 
   to_nat = (fun b ->
