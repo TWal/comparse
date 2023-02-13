@@ -14,7 +14,7 @@
         "type": "indirect"
       }
     },
-    "fstar_flake": {
+    "fstar-flake": {
       "inputs": {
         "flake-utils": "flake-utils",
         "nixpkgs": [
@@ -22,11 +22,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1675658458,
-        "narHash": "sha256-F7AH3ORQhwWoVinDW+504a8IeSmq/qsiWEXziLzjkOg=",
+        "lastModified": 1675983559,
+        "narHash": "sha256-rm4LRqlUclOlGwto1LHukEEQL2PSOsgT7xZxKHI+Nbw=",
         "owner": "FStarLang",
         "repo": "FStar",
-        "rev": "7ead8bc9a4ec4b86e7f974a3e369cb6cb992556b",
+        "rev": "7ae4850a7e24f011a572ab4097fe1045babab48c",
         "type": "github"
       },
       "original": {
@@ -51,7 +51,7 @@
     },
     "root": {
       "inputs": {
-        "fstar_flake": "fstar_flake",
+        "fstar-flake": "fstar-flake",
         "nixpkgs": "nixpkgs"
       }
     }
