@@ -1,14 +1,15 @@
-ifndef FSTAR_HOME
-	FSTAR_HOME = $(dir $(shell which fstar.exe))/..
-endif
-
-include $(FSTAR_HOME)/ulib/gmake/fstar.mk
-include $(FSTAR_HOME)/ulib/ml/Makefile.include
+FSTAR_HOME ?= $(dir $(shell which fstar.exe))/..
 
 SOURCE_DIR = src
 
 INCLUDE_DIRS = $(SOURCE_DIR)
 FSTAR_INCLUDE_DIRS = $(addprefix --include , $(INCLUDE_DIRS))
+
+ADMIT ?=
+MAYBE_ADMIT = $(if $(ADMIT),--admit_smt_queries true)
+
+FSTAR_EXE ?= $(FSTAR_HOME)/bin/fstar.exe
+FSTAR = $(FSTAR_EXE) $(MAYBE_ADMIT)
 
 FSTAR_EXTRACT = --extract '-* +Comparse -Comparse.Tactic'
 FSTAR_FLAGS = $(FSTAR_INCLUDE_DIRS) --cache_checked_modules --already_cached '+Prims +FStar' --warn_error '+241@247+285' --cache_dir cache --odir obj --cmi
@@ -87,4 +88,4 @@ copy_tests: extract_tests
 	cp $(ALL_TEST_ML_FILES) ml/tests/src
 
 check: copy_lib copy_tests
-	OCAMLPATH=$(FSTAR_HOME)/bin:$(OCAMLPATH) dune runtest --no-buffer --profile=release
+	OCAMLPATH=$(FSTAR_HOME)/lib:$(OCAMLPATH) dune runtest --no-buffer --profile=release

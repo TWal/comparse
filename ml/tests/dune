@@ -1,7 +1,7 @@
 (copy_files# src/*)
 
 (test
- (libraries fstarlib comparse)
+ (libraries fstar.lib comparse)
  (name Comparse_Tests_TacticOutput))
 
 (env

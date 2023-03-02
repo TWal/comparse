@@ -1,11 +1,16 @@
-{stdenv, which, fstar, z3, ocamlPackages}:
+{lib, stdenv, which, fstar, fstar-dune, z3, ocamlPackages}:
 
 let
   comparse = stdenv.mkDerivation {
     name = "comparse";
-    src = ./.;
+    # TODO: exclude tests
+    src =
+      lib.sources.sourceByRegex ./. [
+        "Makefile"
+        "src(/.*)?"
+      ]
+    ;
     buildInputs = [ which fstar z3 ];
-    FSTAR_HOME = fstar;
     installPhase = ''
       mkdir -p $out
       cp -r ml src cache hints $out
@@ -14,16 +19,22 @@ let
   };
   comparse-tests = stdenv.mkDerivation {
     name = "comparse-tests";
-    src = ./.;
+    src =
+      lib.sources.sourceByRegex ./. [
+        "Makefile"
+        "src(/.*)?"
+        "dune-project"
+        "ml(/lib(/dune)?)?"
+        "ml(/tests(/dune)?)?"
+        "comparse.opam"
+      ]
+    ;
     buildInputs =
       [ which fstar z3 ]
       ++ (with ocamlPackages; [
         ocaml dune_3 findlib
-        # # fstarlib dependencies
-        # batteries stdint zarith ppx_deriving_yojson
       ])
-      ++ (fstar.buildInputs);
-    FSTAR_HOME = fstar;
+      ++ (fstar-dune.buildInputs);
     # pre-patch uses build output from comparse, to avoid building things twice
     prePatch = ''
       cp -pr --no-preserve=mode ${comparse}/cache ${comparse}/ml .

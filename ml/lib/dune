@@ -2,7 +2,7 @@
 
 (library
  (wrapped false)
- (libraries fstarlib)
+ (libraries fstar.lib)
  (name comparse))
 
 (env
