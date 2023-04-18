@@ -266,8 +266,7 @@ let prove_record_isomorphism_from_pair () =
     ()
   ) in
   let _ = forall_intro () in
-  trefl();
-  gather_or_solve_explicit_guards_for_resolved_goals ()
+  trefl()
 
 val prove_record_isomorphism_from_record: unit -> Tac unit
 let prove_record_isomorphism_from_record () =
@@ -276,8 +275,7 @@ let prove_record_isomorphism_from_record () =
   let binders = intros () in
   let breq = last binders in
   l_to_r_breq [binder_to_term breq];
-  trefl ();
-  gather_or_solve_explicit_guards_for_resolved_goals ()
+  trefl ()
 
 val mk_record_isomorphism: bytes_impl -> typ -> name -> list binder -> parser_term -> Tac parser_term
 let mk_record_isomorphism bi result_type constructor_name constructor_binders (parser_term, parser_type) =
@@ -503,8 +501,7 @@ let prove_pair_sum_pair_isomorphism () =
     apply (`or_split);
     focus solve_one_goal
   ) in
-  focus solve_one_goal;
-  gather_or_solve_explicit_guards_for_resolved_goals ()
+  focus solve_one_goal
 
 val prove_sum_pair_sum_isomorphism: unit -> Tac unit
 let prove_sum_pair_sum_isomorphism () =
@@ -517,8 +514,7 @@ let prove_sum_pair_sum_isomorphism () =
     l_to_r_breq [breq_term];
     compute();
     trefl ()
-  );
-  gather_or_solve_explicit_guards_for_resolved_goals ()
+  )
 
 val mk_sum_isomorphism: bytes_impl -> typ -> typ -> term -> list term -> list ctor -> parser_term -> Tac parser_term
 let mk_sum_isomorphism bi tag_typ result_typ tag_to_pair_typ tag_vals ctors (pairs_parser, pairs_typ) =

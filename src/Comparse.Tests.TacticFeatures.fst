@@ -496,7 +496,7 @@ noeq type test_big_record (bytes:Type0) {|bytes_like bytes|} = {
 %splice [ps_test_big_record_is_well_formed] (gen_is_well_formed_lemma (`test_big_record))
 #pop-options
 
-// This one is a bit hard on the SMT, with the gather_or_solve_... thing
+// This one is a bit hard on the SMT, with the core typechecker
 //#push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0' --z3rlimit 500"
 //%splice [ps_test_big_record_length] (gen_length_lemma (`test_big_record))
 //#pop-options

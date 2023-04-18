@@ -182,8 +182,7 @@ let simplify_length_lemma () =
       norm [primops; iota];
       l_to_r [(`remove_additional_unit)];
       trefl()
-    );
-    gather_or_solve_explicit_guards_for_resolved_goals ()
+    )
   )
 
 val mk_lemma_val: term -> Tac term

@@ -159,7 +159,7 @@ let simplify_is_well_formed_lemma () =
     // The last goals should only be about tags being valid,
     // which the SMT can handle easily if their `is_well_formed` lemmas were generated.
     // dump "end goal";
-    gather_or_solve_explicit_guards_for_resolved_goals ()
+    ()
   )
 
 val mk_lemma_val: term -> Tac term
