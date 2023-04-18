@@ -23,8 +23,7 @@ let rec find_annotation_in_list l expected_hd =
 
 val find_annotation_in_binder: binder -> term -> Tac (option (list term))
 let find_annotation_in_binder b expected_hd =
-  let _, (_, annotations) = inspect_binder b in
-  find_annotation_in_list annotations expected_hd
+  find_annotation_in_list (inspect_binder b).binder_attrs expected_hd
 
 (*** Handle `is_parser` attribute ***)
 
@@ -117,11 +116,10 @@ let rec smart_mk_app_aux t args binders_to_copy =
   match args, binders_to_copy with
   | [], [] -> t
   | a_hd::a_tl, b_hd::b_tl -> (
-    let (_, (q, _)) = inspect_binder b_hd in
     let real_q = (
-      match q with
+      match (inspect_binder b_hd).binder_qual with
       | Q_Meta _ -> Q_Implicit
-      | _ -> q
+      | q -> q
     )
     in
     smart_mk_app_aux (pack (Tv_App t (a_hd, real_q))) a_tl b_tl
@@ -701,8 +699,16 @@ let rec substitute_parser_in_term bi t =
 val get_bytes_impl_and_parser_params: list binder -> Tac (bytes_impl & list binder)
 let get_bytes_impl_and_parser_params params =
   let mk_bi_binders (): Tac (binder & binder) =
-    let b = pack_binder (fresh_bv_named "bytes" (`Type0)) Q_Implicit [] in
-    let bl = pack_binder (fresh_bv_named "bl" (`(bytes_like (`#(binder_to_term b))))) (Q_Meta (`FStar.Tactics.Typeclasses.tcresolve)) [] in
+    let b = pack_binder {
+      binder_bv = (fresh_bv_named "bytes" (`Type0));
+      binder_qual = Q_Implicit;
+      binder_attrs = [] ;
+    } in
+    let bl = pack_binder {
+      binder_bv = (fresh_bv_named "bl" (`(bytes_like (`#(binder_to_term b)))));
+      binder_qual = (Q_Meta (`FStar.Tactics.Typeclasses.tcresolve));
+      binder_attrs = [];
+    } in
     (b, bl)
   in
   let ((bytes_binder, bytes_like_binder), tail_params) =
@@ -710,8 +716,7 @@ let get_bytes_impl_and_parser_params params =
     | b::bl::tail_params -> (
       let b_ok = ((type_of_binder b) `term_eq` (`Type0)) in
       let bl_ok = ((type_of_binder bl) `term_eq` (mk_e_app (`bytes_like) [binder_to_term b])) in
-      let (b_bv, (_, b_annots)) = inspect_binder b in
-      let b_implicit = pack_binder b_bv Q_Implicit b_annots in
+      let b_implicit = pack_binder {inspect_binder b with binder_qual = Q_Implicit} in
       if b_ok && bl_ok then (
         ((b_implicit, bl), tail_params)
       ) else (

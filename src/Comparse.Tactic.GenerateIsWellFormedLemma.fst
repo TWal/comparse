@@ -13,8 +13,8 @@ let mk_lemma_type_ensures bi ps_term pre_term x_term ctors =
     let branch_pattern =
       Pat_Cons (pack_fv ctor_name) None (
         Tactics.Util.map (fun b ->
-          let (b_bv, (q, _)) = inspect_binder b in
-          (Pat_Var b_bv, not (Q_Explicit? q))
+          let b_view = inspect_binder b in
+          (Pat_Var b_view.binder_bv, not (Q_Explicit? b_view.binder_qual))
         ) binders
       )
     in
