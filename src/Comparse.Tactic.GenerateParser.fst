@@ -250,10 +250,11 @@ val arrow_to_forall: #a:Type -> p:(a -> Type0) -> squash (forall (x:a). p x) -> 
 let arrow_to_forall #a p _ x =
   ()
 
-val wrap_isomorphism_proof: (unit -> Tac unit) -> unit -> Tac unit
-let wrap_isomorphism_proof tau () =
+val wrap_isomorphism_proof: bool -> (unit -> Tac unit) -> unit -> Tac unit
+let wrap_isomorphism_proof force_smt tau () =
   apply (`arrow_to_forall);
-  if lax_on() then
+  let is_lax = lax_on () in
+  if force_smt || is_lax then
     smt ()
   else
     tau ()
@@ -277,8 +278,13 @@ let prove_record_isomorphism_from_record () =
   l_to_r_breq [binder_to_term breq];
   trefl ()
 
-val mk_record_isomorphism: bytes_impl -> typ -> name -> list binder -> parser_term -> Tac parser_term
-let mk_record_isomorphism bi result_type constructor_name constructor_binders (parser_term, parser_type) =
+val bool_to_term: bool -> term
+let bool_to_term b =
+  if b then (`true)
+  else (`false)
+
+val mk_record_isomorphism: bool -> bytes_impl -> typ -> name -> list binder -> parser_term -> Tac parser_term
+let mk_record_isomorphism force_smt bi result_type constructor_name constructor_binders (parser_term, parser_type) =
   let the_isomorphism =
     mk_ie_app (`Mkisomorphism_between) [
       parser_type;
@@ -286,8 +292,8 @@ let mk_record_isomorphism bi result_type constructor_name constructor_binders (p
     ] [
       mk_record_isomorphism_f parser_type constructor_name constructor_binders;
       mk_record_isomorphism_g result_type constructor_name constructor_binders;
-      (`(synth_by_tactic (wrap_isomorphism_proof prove_record_isomorphism_from_pair)));
-      (`(synth_by_tactic (wrap_isomorphism_proof prove_record_isomorphism_from_record)));
+      (`(synth_by_tactic (wrap_isomorphism_proof (`#(bool_to_term force_smt)) prove_record_isomorphism_from_pair)));
+      (`(synth_by_tactic (wrap_isomorphism_proof (`#(bool_to_term force_smt)) prove_record_isomorphism_from_record)));
     ]
   in
   let result_parser_term =
@@ -301,11 +307,11 @@ let mk_record_isomorphism bi result_type constructor_name constructor_binders (p
   in
   (result_parser_term, result_type)
 
-val mk_record_parser: bytes_impl -> ctor -> typ -> Tac parser_term
-let mk_record_parser bi (c_name, c_typ) result_parsed_type =
+val mk_record_parser: bool -> bytes_impl -> ctor -> typ -> Tac parser_term
+let mk_record_parser force_smt bi (c_name, c_typ) result_parsed_type =
   let binders, _ = collect_arr_bs c_typ in
   let pairs_parser = mk_parser_pairs bi binders in
-  mk_record_isomorphism bi result_parsed_type c_name binders pairs_parser
+  mk_record_isomorphism force_smt bi result_parsed_type c_name binders pairs_parser
 
 (*** Parser for sum type ***)
 
@@ -516,8 +522,8 @@ let prove_sum_pair_sum_isomorphism () =
     trefl ()
   )
 
-val mk_sum_isomorphism: bytes_impl -> typ -> typ -> term -> list term -> list ctor -> parser_term -> Tac parser_term
-let mk_sum_isomorphism bi tag_typ result_typ tag_to_pair_typ tag_vals ctors (pairs_parser, pairs_typ) =
+val mk_sum_isomorphism: bool -> bytes_impl -> typ -> typ -> term -> list term -> list ctor -> parser_term -> Tac parser_term
+let mk_sum_isomorphism force_smt bi tag_typ result_typ tag_to_pair_typ tag_vals ctors (pairs_parser, pairs_typ) =
   let middle_to_sum_def = mk_middle_to_sum_fun tag_typ tag_to_pair_typ tag_vals ctors in
   let sum_to_middle_def = mk_sum_to_middle_fun result_typ tag_vals ctors in
   let middle_typ = mk_e_app (`dtuple2) [tag_typ; tag_to_pair_typ] in
@@ -530,8 +536,8 @@ let mk_sum_isomorphism bi tag_typ result_typ tag_to_pair_typ tag_vals ctors (pai
   ] [
     ascribe_type (mk_a_to_b middle_typ result_typ) middle_to_sum_def;
     ascribe_type (mk_a_to_b result_typ middle_typ) sum_to_middle_def;
-    (`(synth_by_tactic (wrap_isomorphism_proof prove_pair_sum_pair_isomorphism)));
-    (`(synth_by_tactic (wrap_isomorphism_proof prove_sum_pair_sum_isomorphism)))
+    (`(synth_by_tactic (wrap_isomorphism_proof (`#(bool_to_term force_smt)) prove_pair_sum_pair_isomorphism)));
+    (`(synth_by_tactic (wrap_isomorphism_proof (`#(bool_to_term force_smt)) prove_sum_pair_sum_isomorphism)))
   ] in
   let result_parser = mk_ie_app (apply_implicit_bytes_impl (`isomorphism) bi) [
     pairs_typ;
@@ -542,13 +548,13 @@ let mk_sum_isomorphism bi tag_typ result_typ tag_to_pair_typ tag_vals ctors (pai
   ] in
   (result_parser, result_typ)
 
-val mk_sum_type_parser: bytes_impl -> list ctor -> typ -> Tac parser_term
-let mk_sum_type_parser bi ctors result_type =
+val mk_sum_type_parser: bool -> bytes_impl -> list ctor -> typ -> Tac parser_term
+let mk_sum_type_parser force_smt bi ctors result_type =
   let (tag_typ, tag_vals) = get_tag_from_ctors ctors in
   let tag_parser_term = mk_tag_parser bi tag_typ tag_vals in
   let (tag_parser, tag_typ) = tag_parser_term in
   let (middle_sum_type_parser_term, tag_to_pair_typ) = mk_middle_sum_type_parser bi tag_parser_term tag_vals ctors in
-  mk_sum_isomorphism bi tag_typ result_type tag_to_pair_typ tag_vals ctors middle_sum_type_parser_term
+  mk_sum_isomorphism force_smt bi tag_typ result_type tag_to_pair_typ tag_vals ctors middle_sum_type_parser_term
 
 (*** Parser for open enum ***)
 
@@ -737,8 +743,8 @@ let is_tagged_type constructors =
     true
   )
 
-val gen_parser_fun: term -> term -> Tac (typ & term & bool)
-let gen_parser_fun parser_ty type_fv =
+val gen_parser_fun: term -> term -> bool -> Tac (typ & term & bool)
+let gen_parser_fun parser_ty type_fv force_smt =
   let env = top_env () in
   let type_name = get_name_from_fv type_fv in
   let type_declaration =
@@ -757,11 +763,11 @@ let gen_parser_fun parser_ty type_fv =
           if is_open_enum constructors then (
             mk_open_enum_parser bi constructors result_parsed_type
           ) else (
-            mk_sum_type_parser bi constructors result_parsed_type
+            mk_sum_type_parser force_smt bi constructors result_parsed_type
           )
         ) else (
           guard (Cons? constructors);
-          mk_record_parser bi (Cons?.hd constructors) result_parsed_type
+          mk_record_parser force_smt bi (Cons?.hd constructors) result_parsed_type
         )
       in
       (bi, result_parsed_type, parser_params, parser_fun_body, true)
@@ -783,11 +789,11 @@ let gen_parser_fun parser_ty type_fv =
   let parser_type = mk_arr parser_params (pack_comp (C_Total unparametrized_parser_type)) in
   (parser_type, parser_fun, is_opaque)
 
-val gen_parser_aux: term -> term -> Tac decls
-let gen_parser_aux parser_ty type_fv =
+val gen_parser_aux: term -> term -> bool -> Tac decls
+let gen_parser_aux parser_ty type_fv force_smt =
   let type_name = get_name_from_fv type_fv in
   let parser_name = List.Tot.snoc (moduleof (top_env ()), "ps_" ^ (last type_name)) in
-  let (parser_type, parser_fun, is_opaque) = gen_parser_fun parser_ty type_fv in
+  let (parser_type, parser_fun, is_opaque) = gen_parser_fun parser_ty type_fv force_smt in
   //dump (term_to_string parser_fun);
   //dump (term_to_string parser_type);
   let parser_letbinding = pack_lb ({
@@ -805,8 +811,16 @@ let gen_parser_aux parser_ty type_fv =
 
 val gen_parser: term -> Tac decls
 let gen_parser type_fv =
-  gen_parser_aux (`parser_serializer) type_fv
+  gen_parser_aux (`parser_serializer) type_fv false
 
 val gen_parser_prefix: term -> Tac decls
 let gen_parser_prefix type_fv =
-  gen_parser_aux (`parser_serializer_prefix) type_fv
+  gen_parser_aux (`parser_serializer_prefix) type_fv false
+
+val gen_parser_with_smt: term -> Tac decls
+let gen_parser_with_smt type_fv =
+  gen_parser_aux (`parser_serializer) type_fv true
+
+val gen_parser_prefix_with_smt: term -> Tac decls
+let gen_parser_prefix_with_smt type_fv =
+  gen_parser_aux (`parser_serializer_prefix) type_fv true
