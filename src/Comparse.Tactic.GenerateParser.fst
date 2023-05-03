@@ -2,7 +2,8 @@ module Comparse.Tactic.GenerateParser
 
 open FStar.Tactics
 open Comparse.Bytes.Typeclass
-open Comparse.Parser
+open Comparse.Parser.Builtins
+open Comparse.Parser.Derived
 open Comparse.Tactic.Attributes
 open Comparse.Tactic.Utils
 

@@ -1,7 +1,8 @@
 module Comparse.Tactic.GenerateLengthLemma
 
 open Comparse.Bytes.Typeclass
-open Comparse.Parser
+open Comparse.Parser.Builtins
+open Comparse.Parser.Derived
 open Comparse.Tactic.Utils
 open FStar.Tactics
 

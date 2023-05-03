@@ -2,7 +2,8 @@ module Comparse.Tactic.GenerateSerializeLemma
 
 open FStar.List.Tot
 open Comparse.Bytes.Typeclass
-open Comparse.Parser
+open Comparse.Parser.Builtins
+open Comparse.Parser.Derived
 open Comparse.Tactic.Utils
 open FStar.Tactics
 

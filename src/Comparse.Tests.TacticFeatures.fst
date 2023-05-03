@@ -1,6 +1,7 @@
 module Comparse.Tests.TacticFeatures
 open Comparse.Bytes.Typeclass
-open Comparse.Parser
+open Comparse.Parser.Builtins
+open Comparse.Parser.Derived
 open Comparse.Tactic
 
 (*** Features test ***)

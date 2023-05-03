@@ -1,7 +1,7 @@
 module Comparse.Parser.Typeclass
 
 open Comparse.Bytes.Typeclass
-open Comparse.Parser
+open Comparse.Parser.Builtins
 
 class parseable_serializeable (bytes:Type0) {|bytes_like bytes|} (a:Type) = {
   [@@@FStar.Tactics.Typeclasses.no_method] base: parser_serializer_whole bytes a;
