@@ -12,10 +12,10 @@ val nat_lbytes_helper: sz:nat -> Lemma (normalize_term (pow2 (8*sz)) == pow2 (8*
 /// - We don't require that only `empty` has length zero, e.g. we may have `concat empty empty <> empty`.
 /// - We implement `split` and not `slice`, because `slice` causes trouble in the symbolic case:
 ///   with `slice`, how do you get the left and right part of `concat empty (concat empty empty)`?
-/// - `split` returns an option, hence can fail if the indexes are not on the correct bounds.
+/// - `split` returns an option, hence can fail if the indices are not on the correct bounds.
 ///   * We require `split` to succeed on the bound of a `concat` (see `split_concat_...`).
 ///   * This is useful to state the `concat_split` lemma in a way which would be correct on symbolic bytes.
-/// - To compensate the last fact, and the fact that we don't require decidable equality,
+/// - To compensate the first fact, and the fact that we don't require decidable equality,
 ///   we need a function that recognize the `empty` bytes.
 /// - The `to_nat` function can fail, if the bytes are not public for example
 
