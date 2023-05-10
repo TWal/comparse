@@ -74,13 +74,6 @@ let length_prefix_ps_whole #bytes #bl #a length_pre ps_nat ps_a =
     (fun (|sz, x|) -> x)
     (fun x -> (|length (ps_a.serialize x), x|))
 
-val length_prefix_ps_whole_:
-  #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
-  length_pre:(nat -> bool) -> nat_parser_serializer bytes length_pre ->
-  ps_a:parser_serializer_whole bytes a{forall x. length_pre (length (ps_a.serialize x))} ->
-  parser_serializer bytes a
-
-
 let length_prefix_ps_whole_serialize #bytes #bl #a length_pre ps_length ps_a x = ()
 
 let length_prefix_ps_whole_is_well_formed #bytes #bl #a length_pre ps_length ps_a pre x =
