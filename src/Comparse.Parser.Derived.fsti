@@ -76,33 +76,33 @@ val ps_nat_lbytes_length:
 
 type nat_parser_serializer (bytes:Type0) {| bytes_like bytes |} (pre_length:nat -> bool)= ps:parser_serializer bytes (refined nat pre_length){forall pre n. is_well_formed_prefix ps pre n}
 
-val ps_whole_to_ps_prefix:
+val length_prefix_ps_whole:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
   length_pre:(nat -> bool) -> nat_parser_serializer bytes length_pre ->
   ps_a:parser_serializer_whole bytes a{forall x. length_pre (length (ps_a.serialize x))} ->
   parser_serializer bytes a
 
-val ps_whole_to_ps_prefix_serialize:
+val length_prefix_ps_whole_serialize:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
   length_pre:(nat -> bool) -> ps_length:nat_parser_serializer bytes length_pre ->
   ps_a:parser_serializer_whole bytes a{forall x. length_pre (length (ps_a.serialize x))} ->
   x:a ->
-  Lemma ((ps_whole_to_ps_prefix length_pre ps_length ps_a).serialize x == (ps_length.serialize (length (ps_a.serialize x))) @ [ps_a.serialize x])
-  [SMTPat ((ps_whole_to_ps_prefix length_pre ps_length ps_a).serialize x)]
+  Lemma ((length_prefix_ps_whole length_pre ps_length ps_a).serialize x == (ps_length.serialize (length (ps_a.serialize x))) @ [ps_a.serialize x])
+  [SMTPat ((length_prefix_ps_whole length_pre ps_length ps_a).serialize x)]
 
-val ps_whole_to_ps_prefix_is_well_formed:
+val length_prefix_ps_whole_is_well_formed:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
   length_pre:(nat -> bool) -> ps_length:nat_parser_serializer bytes length_pre ->
   ps_a:parser_serializer_whole bytes a{forall x. length_pre (length (ps_a.serialize x))} ->
   pre:bytes_compatible_pre bytes -> x:a -> Lemma
-  (is_well_formed_prefix (ps_whole_to_ps_prefix length_pre ps_length ps_a) pre x <==> is_well_formed_whole ps_a pre x)
+  (is_well_formed_prefix (length_prefix_ps_whole length_pre ps_length ps_a) pre x <==> is_well_formed_whole ps_a pre x)
 
-val ps_whole_to_ps_prefix_length:
+val length_prefix_ps_whole_length:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
   length_pre:(nat -> bool) -> ps_length:nat_parser_serializer bytes length_pre ->
   ps_a:parser_serializer_whole bytes a{forall x. length_pre (length (ps_a.serialize x))} ->
   x:a -> Lemma
-  (prefixes_length ((ps_whole_to_ps_prefix length_pre ps_length ps_a).serialize x) == (prefixes_length (ps_length.serialize (length (ps_a.serialize x)))) + (length (ps_a.serialize x)))
+  (prefixes_length ((length_prefix_ps_whole length_pre ps_length ps_a).serialize x) == (prefixes_length (ps_length.serialize (length (ps_a.serialize x)))) + (length (ps_a.serialize x)))
 
 
 (*** Whole parsers ***)

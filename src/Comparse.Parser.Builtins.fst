@@ -629,7 +629,7 @@ let ps_prefix_to_ps_whole_length #bytes #bl #a ps_a x =
   empty_length #bytes ();
   add_prefixes_length (ps_a.serialize x) empty
 
-let ps_whole_to_bare_ps_prefix #bytes #bl #a len ps_a =
+let ps_whole_to_ps_prefix #bytes #bl #a len ps_a =
   let parse_a (buf:bytes) =
     match split buf len with
     | None -> None
@@ -665,9 +665,9 @@ let ps_whole_to_bare_ps_prefix #bytes #bl #a len ps_a =
     );
   }
 
-let ps_whole_to_bare_ps_prefix_serialize #bytes #bl #a len ps_a x = ()
+let ps_whole_to_ps_prefix_serialize #bytes #bl #a len ps_a x = ()
 
 #push-options "--fuel 1 --ifuel 0"
-let ps_whole_to_bare_ps_prefix_is_not_unit #bytes #bl #a len ps_a =
+let ps_whole_to_ps_prefix_is_not_unit #bytes #bl #a len ps_a =
   reveal_opaque (`%prefixes_length) (prefixes_length #bytes)
 #pop-options

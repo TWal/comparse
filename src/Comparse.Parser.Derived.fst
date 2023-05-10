@@ -23,7 +23,7 @@ let rec prefixes_length_concat #bytes #bl l1 l2 =
 #pop-options
 
 let ps_lbytes #bytes #bl n =
-  mk_trivial_isomorphism (ps_whole_to_bare_ps_prefix n (refine_whole ps_whole_bytes (ps_whole_length_pred ps_whole_bytes n)))
+  mk_trivial_isomorphism (ps_whole_to_ps_prefix n (refine_whole ps_whole_bytes (ps_whole_length_pred ps_whole_bytes n)))
 
 let ps_lbytes_serialize #bytes #bl n x = ()
 
@@ -67,29 +67,29 @@ let ps_nat_lbytes_is_well_formed #bytes #bl sz pre x = assert_norm(for_allP pre 
 
 let ps_nat_lbytes_length #bytes #bl sz x = ()
 
-let ps_whole_to_ps_prefix #bytes #bl #a length_pre ps_nat ps_a =
+let length_prefix_ps_whole #bytes #bl #a length_pre ps_nat ps_a =
   let b (sz:refined nat length_pre) = refined a (ps_whole_length_pred ps_a sz) in
   mk_isomorphism a
-    (bind #bytes #_ #(refined nat length_pre) #b ps_nat (fun sz -> ps_whole_to_bare_ps_prefix sz (refine_whole ps_a (ps_whole_length_pred ps_a sz))))
+    (bind #bytes #_ #(refined nat length_pre) #b ps_nat (fun sz -> ps_whole_to_ps_prefix sz (refine_whole ps_a (ps_whole_length_pred ps_a sz))))
     (fun (|sz, x|) -> x)
     (fun x -> (|length (ps_a.serialize x), x|))
 
-val ps_whole_to_ps_prefix_:
+val length_prefix_ps_whole_:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
   length_pre:(nat -> bool) -> nat_parser_serializer bytes length_pre ->
   ps_a:parser_serializer_whole bytes a{forall x. length_pre (length (ps_a.serialize x))} ->
   parser_serializer bytes a
 
 
-let ps_whole_to_ps_prefix_serialize #bytes #bl #a length_pre ps_length ps_a x = ()
+let length_prefix_ps_whole_serialize #bytes #bl #a length_pre ps_length ps_a x = ()
 
-let ps_whole_to_ps_prefix_is_well_formed #bytes #bl #a length_pre ps_length ps_a pre x =
+let length_prefix_ps_whole_is_well_formed #bytes #bl #a length_pre ps_length ps_a pre x =
   let x_serialized = ps_a.serialize x in
   for_allP_append pre (ps_length.serialize (length x_serialized)) [x_serialized];
   assert(is_well_formed_prefix ps_length pre (length x_serialized));
   assert_norm(for_allP pre [x_serialized] <==> pre x_serialized)
 
-let ps_whole_to_ps_prefix_length #bytes #bl #a length_pre ps_length ps_a x =
+let length_prefix_ps_whole_length #bytes #bl #a length_pre ps_length ps_a x =
   let x_serialized = ps_a.serialize x in
   prefixes_length_concat (ps_length.serialize (length x_serialized)) [x_serialized];
   assert_norm (prefixes_length [x_serialized] == length x_serialized)
@@ -328,16 +328,16 @@ let ps_whole_pre_length_bytes #bytes #bl pre_length =
   mk_trivial_isomorphism_whole (refine_whole ps_whole_bytes length_pred)
 
 let ps_pre_length_bytes #bytes #bl pre_length ps_length =
-  ps_whole_to_ps_prefix pre_length ps_length (ps_whole_pre_length_bytes pre_length)
+  length_prefix_ps_whole pre_length ps_length (ps_whole_pre_length_bytes pre_length)
 
 let ps_pre_length_bytes_serialize #bytes #bl pre_length ps_length x =
-  ps_whole_to_ps_prefix_serialize pre_length ps_length (ps_whole_pre_length_bytes pre_length) x
+  length_prefix_ps_whole_serialize pre_length ps_length (ps_whole_pre_length_bytes pre_length) x
 
 let ps_pre_length_bytes_is_well_formed #bytes #bl pre_length ps_length pre x =
-  ps_whole_to_ps_prefix_is_well_formed pre_length ps_length (ps_whole_pre_length_bytes pre_length) pre x
+  length_prefix_ps_whole_is_well_formed pre_length ps_length (ps_whole_pre_length_bytes pre_length) pre x
 
 let ps_pre_length_bytes_length #bytes #bl pre_length ps_length x =
-  ps_whole_to_ps_prefix_length pre_length ps_length (ps_whole_pre_length_bytes pre_length) x
+  length_prefix_ps_whole_length pre_length ps_length (ps_whole_pre_length_bytes pre_length) x
 
 val ps_whole_pre_length_list: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> pre_length:(nat -> bool) -> ps_a:parser_serializer bytes a -> parser_serializer_whole bytes (pre_length_list ps_a pre_length)
 let ps_whole_pre_length_list #bytes #bl #a pre_length ps_a =
@@ -345,17 +345,17 @@ let ps_whole_pre_length_list #bytes #bl #a pre_length ps_a =
   mk_trivial_isomorphism_whole (refine_whole (ps_whole_list ps_a) length_pred)
 
 let ps_pre_length_list #bytes #bl #a pre_length ps_length ps_a =
-  ps_whole_to_ps_prefix pre_length ps_length (ps_whole_pre_length_list pre_length ps_a)
+  length_prefix_ps_whole pre_length ps_length (ps_whole_pre_length_list pre_length ps_a)
 
 let ps_pre_length_list_serialize #bytes #bl #a pre_length ps_length ps_a x =
-  ps_whole_to_ps_prefix_serialize pre_length ps_length (ps_whole_pre_length_list pre_length ps_a) x
+  length_prefix_ps_whole_serialize pre_length ps_length (ps_whole_pre_length_list pre_length ps_a) x
 
 let ps_pre_length_list_is_well_formed #bytes #bl #a pre_length ps_length ps_a pre x =
-  ps_whole_to_ps_prefix_is_well_formed pre_length ps_length (ps_whole_pre_length_list pre_length ps_a) pre x;
+  length_prefix_ps_whole_is_well_formed pre_length ps_length (ps_whole_pre_length_list pre_length ps_a) pre x;
   assert(is_well_formed_whole (ps_whole_pre_length_list pre_length ps_a) pre x <==> is_well_formed_whole (ps_whole_list ps_a) pre x)
 
 let ps_pre_length_list_length #bytes #bl #a pre_length ps_length ps_a x =
-  ps_whole_to_ps_prefix_length pre_length ps_length (ps_whole_pre_length_list pre_length ps_a) x
+  length_prefix_ps_whole_length pre_length ps_length (ps_whole_pre_length_list pre_length ps_a) x
 
 let ps_pre_length_seq #bytes #bl #a pre_length ps_length ps_a =
   FStar.Classical.forall_intro (Seq.lemma_list_seq_bij #a);

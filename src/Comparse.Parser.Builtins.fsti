@@ -589,23 +589,22 @@ let ps_whole_length_pred
   : bool =
   length (ps_a.serialize x) = n
 
-val ps_whole_to_bare_ps_prefix:
+val ps_whole_to_ps_prefix:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
   len:nat -> ps_a:parser_serializer_whole bytes a{forall x. length (ps_a.serialize x) == len} ->
   parser_serializer_prefix bytes a
 
-val ps_whole_to_bare_ps_prefix_serialize:
+val ps_whole_to_ps_prefix_serialize:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
   len:nat -> ps_a:parser_serializer_whole bytes a{forall x. length (ps_a.serialize x) == len} ->
   x:a ->
-  Lemma ((ps_whole_to_bare_ps_prefix len ps_a).serialize x == [ps_a.serialize x])
-  [SMTPat ((ps_whole_to_bare_ps_prefix len ps_a).serialize x)]
+  Lemma ((ps_whole_to_ps_prefix len ps_a).serialize x == [ps_a.serialize x])
+  [SMTPat ((ps_whole_to_ps_prefix len ps_a).serialize x)]
 
-val ps_whole_to_bare_ps_prefix_is_not_unit:
+val ps_whole_to_ps_prefix_is_not_unit:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
   len:nat -> ps_a:parser_serializer_whole bytes a{forall x. length (ps_a.serialize x) == len} ->
   Lemma
   (requires 1 <= len)
-  (ensures is_not_unit (ps_whole_to_bare_ps_prefix len ps_a))
-  [SMTPat (is_not_unit (ps_whole_to_bare_ps_prefix len ps_a))]
-
+  (ensures is_not_unit (ps_whole_to_ps_prefix len ps_a))
+  [SMTPat (is_not_unit (ps_whole_to_ps_prefix len ps_a))]
