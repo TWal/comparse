@@ -1,6 +1,7 @@
 module Comparse.Tactic.GenerateParser
 
 open FStar.Tactics
+open FStar.List.Tot
 open Comparse.Bytes.Typeclass
 open Comparse.Parser.Builtins
 open Comparse.Parser.Derived
@@ -375,7 +376,7 @@ let mk_tag_parser bi tag_typ tag_vals =
     let mk_disj value acc: Tac term = `(((`#(mk_equality tag_term value))) || (`#acc)) in
     guard (Cons? tag_vals);
     let tag_vals_head::tag_vals_tail = tag_vals in
-    let disj = fold_right mk_disj tag_vals_tail (`((`#(mk_equality tag_term tag_vals_head)))) in
+    let disj = FStar.Tactics.fold_right mk_disj tag_vals_tail (`((`#(mk_equality tag_term tag_vals_head)))) in
     pack (Tv_Abs (mk_binder tag_bv) disj)
   in
   let (tag_parser, tag_typ) = parser_from_type bi tag_typ in

@@ -1,10 +1,11 @@
 module Comparse.Tactic.GenerateIsWellFormedLemma
 
+open FStar.List.Tot
+open FStar.Tactics
 open Comparse.Bytes.Typeclass
 open Comparse.Parser.Builtins
 open Comparse.Parser.Derived
 open Comparse.Tactic.Utils
-open FStar.Tactics
 
 val mk_lemma_type_ensures: GenerateParser.bytes_impl -> term -> term -> term -> list ctor -> Tac term
 let mk_lemma_type_ensures bi ps_term pre_term x_term ctors =

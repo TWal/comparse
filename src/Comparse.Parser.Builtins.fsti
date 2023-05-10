@@ -1,5 +1,6 @@
 module Comparse.Parser.Builtins
 
+open FStar.List.Tot
 open Comparse.Bytes.Typeclass
 open Comparse.Tactic.Attributes
 open Comparse.Utils
