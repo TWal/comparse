@@ -132,6 +132,33 @@ val ps_whole_ascii_string_length:
   Lemma (length ((ps_whole_ascii_string #bytes).serialize x) == FStar.String.strlen x)
   [SMTPat (length ((ps_whole_ascii_string #bytes).serialize x))]
 
+let nat_lbytes_1_is_null (x:nat_lbytes 1) = x = 0
+let char_is_null_terminated_ascii (x:FStar.Char.char) = 1 <= FStar.Char.int_of_char x && FStar.Char.int_of_char x < 256
+let string_is_null_terminated_ascii (s:string) = List.Tot.for_all char_is_null_terminated_ascii (FStar.String.list_of_string s)
+type null_terminated_ascii_string = s:string{normalize_term (b2t (string_is_null_terminated_ascii s))}
+let null_terminated_ascii_char_to_byte (c:refined FStar.Char.char char_is_null_terminated_ascii): refined (nat_lbytes 1) (pred_not nat_lbytes_1_is_null) = FStar.Char.int_of_char c
+
+val ps_null_terminated_ascii_string:
+  #bytes:Type0 -> {|bytes_like bytes|} ->
+  parser_serializer bytes null_terminated_ascii_string
+
+val ps_null_terminated_ascii_string_serialize:
+  #bytes:Type0 -> {|bytes_like bytes|} ->
+  x:null_terminated_ascii_string ->
+  Lemma (
+    (ps_null_terminated_ascii_string #bytes).serialize x ==
+    List.Tot.fold_right (@) (List.Tot.map #(refined (nat_lbytes 1) (pred_not nat_lbytes_1_is_null)) ((ps_nat_lbytes 1).serialize) (List.Tot.map null_terminated_ascii_char_to_byte (List.Tot.list_refb #_ #char_is_null_terminated_ascii (FStar.String.list_of_string x)))) ((ps_nat_lbytes 1).serialize 0)
+  )
+  [SMTPat ((ps_null_terminated_ascii_string #bytes).serialize x)]
+
+val ps_null_terminated_ascii_string_length:
+  #bytes:Type0 -> {|bytes_like bytes|} ->
+  x:null_terminated_ascii_string ->
+  Lemma (
+    prefixes_length ((ps_null_terminated_ascii_string #bytes).serialize x) == FStar.String.strlen x + 1
+  )
+  [SMTPat (prefixes_length ((ps_null_terminated_ascii_string #bytes).serialize x))]
+
 (*** Parser for variable-length bytes / lists ***)
 
 /// The parsers below work by serializing length first, then the variable-length data.

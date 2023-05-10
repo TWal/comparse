@@ -218,16 +218,106 @@ let ps_whole_ascii_string_serialize #bytes #bl x =
 #pop-options
 
 #push-options "--fuel 1 --ifuel 1"
+val bytes_length_nat_lbytes_1:
+  bytes:Type0 -> {|bytes_like bytes|} ->
+  l:list (nat_lbytes 1) ->
+  Lemma (bytes_length #bytes (ps_nat_lbytes 1) l == List.Tot.length l)
+let rec bytes_length_nat_lbytes_1 bytes #bl l =
+  match l with
+  | [] -> ()
+  | h::t -> bytes_length_nat_lbytes_1 bytes t
+#pop-options
+
+#push-options "--fuel 1 --ifuel 1"
 let ps_whole_ascii_string_length #bytes #bl x =
-  let rec lem (l:list (nat_lbytes 1)): Lemma (bytes_length #bytes (ps_nat_lbytes 1) l == List.Tot.length l) =
-    match l with
-    | [] -> ()
-    | h::t -> lem t
-  in
   ps_whole_ascii_string_serialize #bytes x;
   let the_list = (List.Tot.map ascii_char_to_byte (List.Tot.list_refb #_ #char_is_ascii (FStar.String.list_of_string x))) in
   ps_whole_list_length #bytes (ps_nat_lbytes 1) the_list;
-  lem the_list
+  bytes_length_nat_lbytes_1 bytes the_list
+#pop-options
+
+let ps_null_terminated_ascii_string #bytes #bl =
+  let null_terminated_ascii_string_nonorm = s:string{string_is_null_terminated_ascii s} in
+  let list_char_is_null_terminated_ascii (l: list FStar.Char.char) = List.Tot.for_all char_is_null_terminated_ascii l in
+  let list_null_terminated_ascii_char = l: list FStar.Char.char{list_char_is_null_terminated_ascii l} in
+  let ps_list_nonzero_nat_lbytes_1 =
+    mk_isomorphism (list (refined (nat_lbytes 1) (pred_not nat_lbytes_1_is_null))) (ps_list_until #bytes (ps_nat_lbytes 1) nat_lbytes_1_is_null)
+    (fun (l, last) -> l)
+    (fun l -> (l, 0))
+  in
+  let ps_list_null_terminated_ascii_char =
+    isomorphism ps_list_nonzero_nat_lbytes_1 (
+      isomorphism_between_list {
+        a_to_b = (fun (x:refined (nat_lbytes 1) (pred_not nat_lbytes_1_is_null)) ->
+          (FStar.Char.char_of_int x <: (c:FStar.Char.char{char_is_null_terminated_ascii c}))
+        );
+        b_to_a = null_terminated_ascii_char_to_byte ;
+        a_to_b_to_a = (fun x -> FStar.Char.u32_of_char_of_u32 (FStar.UInt32.uint_to_t x));
+        b_to_a_to_b = (fun x -> FStar.Char.char_of_u32_of_char x);
+      }
+    )
+  in
+  let ps_list_null_terminated_ascii_char': parser_serializer bytes list_null_terminated_ascii_char =
+    mk_trivial_isomorphism (
+      isomorphism ps_list_null_terminated_ascii_char ({
+        a_to_b = (fun (x:list (c:FStar.Char.char{char_is_null_terminated_ascii c})) ->
+          list_unrefb #FStar.Char.char #char_is_null_terminated_ascii x
+        );
+        b_to_a = (fun (x:list_null_terminated_ascii_char) ->
+          list_refb #FStar.Char.char #char_is_null_terminated_ascii x
+        );
+        a_to_b_to_a = (fun x -> list_refb_unrefb #FStar.Char.char #char_is_null_terminated_ascii x);
+        b_to_a_to_b = (fun x -> list_unrefb_refb #FStar.Char.char #char_is_null_terminated_ascii x);
+      })
+    )
+  in
+  let ps_null_terminated_ascii_string_nonorm =
+    isomorphism ps_list_null_terminated_ascii_char' ({
+      a_to_b = (fun (x:list_null_terminated_ascii_char) ->
+        FStar.String.list_of_string_of_list x;
+        (FStar.String.string_of_list x) <: null_terminated_ascii_string_nonorm
+      );
+      b_to_a = (fun (x:null_terminated_ascii_string_nonorm) ->
+        FStar.String.list_of_string x
+      );
+      a_to_b_to_a = (fun x -> FStar.String.list_of_string_of_list x);
+      b_to_a_to_b = (fun x -> FStar.String.string_of_list_of_string x);
+    })
+  in
+  assert_norm(forall x. string_is_null_terminated_ascii x <==> normalize_term (b2t (string_is_null_terminated_ascii x)));
+  mk_trivial_isomorphism ps_null_terminated_ascii_string_nonorm
+
+#push-options "--fuel 1 --ifuel 1"
+let ps_null_terminated_ascii_string_serialize #bytes #bl x =
+  assert((ps_null_terminated_ascii_string #bytes).serialize x ==
+    (ps_list_until (ps_nat_lbytes 1) nat_lbytes_1_is_null).serialize
+      ((List.Tot.map null_terminated_ascii_char_to_byte (List.Tot.list_refb #_ #char_is_null_terminated_ascii (FStar.String.list_of_string x))),0)
+  );
+  let a = nat_lbytes 1 in
+  let ps_a = ps_nat_lbytes #bytes 1 in
+  let pred = nat_lbytes_1_is_null in
+  let l = (List.Tot.map null_terminated_ascii_char_to_byte (List.Tot.list_refb #_ #char_is_null_terminated_ascii (FStar.String.list_of_string x))) in
+  let last: refined (nat_lbytes 1) (nat_lbytes_1_is_null) = 0 in
+  assert(((ps_list_until ps_a pred).serialize (l, last) == (List.Tot.fold_right (@) (List.Tot.map ps_a.serialize l) (ps_a.serialize last)))
+  ) by (FStar.Tactics.apply_lemma (`ps_list_until_serialize))
+#pop-options
+
+#push-options "--fuel 1 --ifuel 1"
+let ps_null_terminated_ascii_string_length #bytes #bl x =
+  assert((ps_null_terminated_ascii_string #bytes).serialize x ==
+    (ps_list_until (ps_nat_lbytes 1) nat_lbytes_1_is_null).serialize
+      ((List.Tot.map null_terminated_ascii_char_to_byte (List.Tot.list_refb #_ #char_is_null_terminated_ascii (FStar.String.list_of_string x))),0)
+  );
+  let a = nat_lbytes 1 in
+  let ps_a = ps_nat_lbytes #bytes 1 in
+  let pred = nat_lbytes_1_is_null in
+  let l = (List.Tot.map null_terminated_ascii_char_to_byte (List.Tot.list_refb #_ #char_is_null_terminated_ascii (FStar.String.list_of_string x))) in
+  let last: refined (nat_lbytes 1) (nat_lbytes_1_is_null) = 0 in
+  assert((prefixes_length ((ps_list_until ps_a pred).serialize (l, last)) ==
+    bytes_length ps_a (List.Tot.map id l) +
+    prefixes_length (ps_a.serialize last)
+  )) by (FStar.Tactics.apply_lemma (`ps_list_until_length));
+  bytes_length_nat_lbytes_1 bytes (List.Tot.map id l)
 #pop-options
 
 (*** Parser for variable-length lists ***)
