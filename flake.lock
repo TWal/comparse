@@ -17,16 +17,14 @@
     "fstar-flake": {
       "inputs": {
         "flake-utils": "flake-utils",
-        "nixpkgs": [
-          "nixpkgs"
-        ]
+        "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1681489664,
-        "narHash": "sha256-vqMsErdrV7DkQsmjMnHHRXYTw79QKupg4nyZoO62nh8=",
+        "lastModified": 1684144101,
+        "narHash": "sha256-3NpcEcp1CKpWXH4efmgRGKC5kOrV5ctIRMUsWEja29A=",
         "owner": "FStarLang",
         "repo": "FStar",
-        "rev": "b07d0e2cbd398ea074579f50805b1e3dc3e57a04",
+        "rev": "31e595dcc610d64e6424f54d486784672f8e90f1",
         "type": "github"
       },
       "original": {
@@ -37,22 +35,26 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1681753173,
-        "narHash": "sha256-MrGmzZWLUqh2VstoikKLFFIELXm/lsf/G9U9zR96VD4=",
+        "lastModified": 1669140675,
+        "narHash": "sha256-npzfyfLECsJWgzK/M4gWhykP2DNAJTYjgY2BWkz/oEQ=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "0a4206a51b386e5cda731e8ac78d76ad924c7125",
+        "rev": "2788904d26dda6cfa1921c5abb7a2466ffe3cb8c",
         "type": "github"
       },
       "original": {
         "id": "nixpkgs",
+        "ref": "nixos-unstable",
         "type": "indirect"
       }
     },
     "root": {
       "inputs": {
         "fstar-flake": "fstar-flake",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": [
+          "fstar-flake",
+          "nixpkgs"
+        ]
       }
     }
   },

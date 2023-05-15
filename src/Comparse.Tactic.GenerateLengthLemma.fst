@@ -26,7 +26,7 @@ let mk_lemma_type_ensures bi ps_term x_term ctors =
       Pat_Cons (pack_fv ctor_name) None (
         Tactics.Util.map (fun b ->
           let b_view = inspect_binder b in
-          (Pat_Var b_view.binder_bv, not (Q_Explicit? b_view.binder_qual))
+          (Pat_Var (bv_of_binder b) (seal (type_of_binder b)), not (Q_Explicit? b_view.binder_qual))
         ) binders
       )
     in
@@ -73,13 +73,13 @@ let mk_lemma_type type_unapplied params ctors =
   let (bi, parser_params) = GenerateParser.get_bytes_impl_and_parser_params params in
   let (bytes_term, bytes_like_term) = bi in
   let (ps_term, _) = GenerateParser.parser_from_type bi type_applied in
-  let x_bv = fresh_bv_named "x" type_applied in
+  let x_bv = fresh_bv_named "x" in
   let x_term = pack (Tv_Var x_bv) in
   let lemma_requires = (`True) in
   let lemma_ensures = mk_lemma_type_ensures bi ps_term x_term ctors in
   let lemma_smtpat = mk_lemma_type_smtpat ps_term x_term in
   let eff = pack_comp (C_Lemma lemma_requires (`(fun () -> (`#lemma_ensures))) (`([smt_pat (`#lemma_smtpat)]))) in
-  mk_arr (parser_params @ [mk_binder x_bv]) eff
+  mk_arr (parser_params @ [mk_binder x_bv type_applied]) eff
 
 val my_isomorphism_length_with_id:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:Type ->

@@ -112,6 +112,7 @@ let string_is_ascii (s:string) = List.Tot.for_all char_is_ascii (FStar.String.li
 type ascii_string = s:string{normalize_term (b2t (string_is_ascii s))}
 let ascii_char_to_byte (c:FStar.Char.char{char_is_ascii c}): nat_lbytes 1 = FStar.Char.int_of_char c
 
+
 val ps_whole_ascii_string:
   #bytes:Type0 -> {|bytes_like bytes|} ->
   parser_serializer_whole bytes ascii_string

@@ -96,6 +96,17 @@ let rec list_unrefb #a #p l =
 #pop-options
 
 #push-options "--ifuel 1 --fuel 1"
+val list_unrefb_refb:
+  #a:eqtype -> #p:(a -> bool) ->
+  l:list a{for_all p l} ->
+  Lemma (list_unrefb #a #p (list_refb #a #p l) == l)
+let rec list_unrefb_refb #a #p l =
+  match l with
+  | [] -> ()
+  | h::t -> list_unrefb_refb #a #p t
+#pop-options
+
+#push-options "--ifuel 1 --fuel 1"
 val list_refb_unrefb:
   #a:eqtype -> #p:(a -> bool) ->
   l:list (x:a {p x}) ->
@@ -109,17 +120,6 @@ let rec list_refb_unrefb #a #p l =
     list_refb_unrefb #a #p t;
     assert_norm(list_refb #a #p (list_unrefb #a #p (h::t)) == h::(list_refb #a #p (list_unrefb #a #p t)))
   )
-#pop-options
-
-#push-options "--ifuel 1 --fuel 1"
-val list_unrefb_refb:
-  #a:eqtype -> #p:(a -> bool) ->
-  l:list a{for_all p l} ->
-  Lemma (list_unrefb #a #p (list_refb #a #p l) == l)
-let rec list_unrefb_refb #a #p l =
-  match l with
-  | [] -> ()
-  | h::t -> list_unrefb_refb #a #p t
 #pop-options
 
 #push-options "--ifuel 1 --fuel 1"
