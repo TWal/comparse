@@ -229,6 +229,12 @@ let ps_whole_ascii_string_length #bytes #bl x =
   bytes_length_nat_lbytes_1 bytes the_list
 #pop-options
 
+let ps_whole_ascii_string_is_well_formed #bytes #bl pre x =
+  ps_whole_ascii_string_serialize #bytes x;
+  let the_list = (List.Tot.map ascii_char_to_byte (List.Tot.list_refb #_ #char_is_ascii (FStar.String.list_of_string x))) in
+  ps_whole_list_is_well_formed #bytes (ps_nat_lbytes 1) pre the_list;
+  for_allP_eq (is_well_formed_prefix (ps_nat_lbytes 1) pre) the_list
+
 let ps_null_terminated_ascii_string #bytes #bl =
   let null_terminated_ascii_string_nonorm = s:string{string_is_null_terminated_ascii s} in
   let list_char_is_null_terminated_ascii (l: list FStar.Char.char) = List.Tot.for_all char_is_null_terminated_ascii l in
@@ -295,23 +301,17 @@ let ps_null_terminated_ascii_string_serialize #bytes #bl x =
   ) by (FStar.Tactics.apply_lemma (`ps_list_until_serialize))
 #pop-options
 
-#push-options "--fuel 1 --ifuel 1"
 let ps_null_terminated_ascii_string_length #bytes #bl x =
-  assert((ps_null_terminated_ascii_string #bytes).serialize x ==
-    (ps_list_until (ps_nat_lbytes 1) nat_lbytes_1_is_null).serialize
-      ((List.Tot.map null_terminated_ascii_char_to_byte (List.Tot.list_refb #_ #char_is_null_terminated_ascii (FStar.String.list_of_string x))),0)
-  );
-  let a = nat_lbytes 1 in
-  let ps_a = ps_nat_lbytes #bytes 1 in
-  let pred = nat_lbytes_1_is_null in
+  ps_null_terminated_ascii_string_serialize #bytes x;
   let l = (List.Tot.map null_terminated_ascii_char_to_byte (List.Tot.list_refb #_ #char_is_null_terminated_ascii (FStar.String.list_of_string x))) in
-  let last: refined (nat_lbytes 1) (nat_lbytes_1_is_null) = 0 in
-  assert((prefixes_length ((ps_list_until ps_a pred).serialize (l, last)) ==
-    bytes_length ps_a (List.Tot.map id l) +
-    prefixes_length (ps_a.serialize last)
-  )) by (FStar.Tactics.apply_lemma (`ps_list_until_length));
+  ps_list_until_length (ps_nat_lbytes #bytes 1) nat_lbytes_1_is_null (l, 0);
   bytes_length_nat_lbytes_1 bytes (List.Tot.map id l)
-#pop-options
+
+let ps_null_terminated_ascii_string_is_well_formed #bytes #bl pre x =
+  ps_null_terminated_ascii_string_serialize #bytes x;
+  let l = (List.Tot.map null_terminated_ascii_char_to_byte (List.Tot.list_refb #_ #char_is_null_terminated_ascii (FStar.String.list_of_string x))) in
+  ps_list_until_is_well_formed (ps_nat_lbytes #bytes 1) nat_lbytes_1_is_null pre (l, 0);
+  for_allP_eq (is_well_formed_prefix (ps_nat_lbytes 1) pre) l
 
 (*** Parser for variable-length lists ***)
 

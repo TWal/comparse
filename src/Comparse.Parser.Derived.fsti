@@ -133,6 +133,12 @@ val ps_whole_ascii_string_length:
   Lemma (length ((ps_whole_ascii_string #bytes).serialize x) == FStar.String.strlen x)
   [SMTPat (length ((ps_whole_ascii_string #bytes).serialize x))]
 
+val ps_whole_ascii_string_is_well_formed:
+  #bytes:Type0 -> {|bytes_like bytes|} ->
+  pre:bytes_compatible_pre bytes -> x:ascii_string ->
+  Lemma (is_well_formed_whole (ps_whole_ascii_string #bytes) pre x)
+  [SMTPat (is_well_formed_whole (ps_whole_ascii_string #bytes) pre x)]
+
 let nat_lbytes_1_is_null (x:nat_lbytes 1) = x = 0
 let char_is_null_terminated_ascii (x:FStar.Char.char) = 1 <= FStar.Char.int_of_char x && FStar.Char.int_of_char x < 256
 let string_is_null_terminated_ascii (s:string) = List.Tot.for_all char_is_null_terminated_ascii (FStar.String.list_of_string s)
@@ -159,6 +165,12 @@ val ps_null_terminated_ascii_string_length:
     prefixes_length ((ps_null_terminated_ascii_string #bytes).serialize x) == FStar.String.strlen x + 1
   )
   [SMTPat (prefixes_length ((ps_null_terminated_ascii_string #bytes).serialize x))]
+
+val ps_null_terminated_ascii_string_is_well_formed:
+  #bytes:Type0 -> {|bytes_like bytes|} ->
+  pre:bytes_compatible_pre bytes -> x:null_terminated_ascii_string ->
+  Lemma (is_well_formed_prefix (ps_null_terminated_ascii_string #bytes) pre x)
+  [SMTPat (is_well_formed_prefix (ps_null_terminated_ascii_string #bytes) pre x)]
 
 (*** Parser for variable-length bytes / lists ***)
 
