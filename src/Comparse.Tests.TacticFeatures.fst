@@ -399,7 +399,7 @@ type test_one_element_enum_with_num_tag =
 %splice [ps_test_one_element_enum_with_num_tag_is_well_formed] (gen_is_well_formed_lemma (`test_one_element_enum_with_num_tag))
 #pop-options
 
-#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0' --z3rlimit 25"
 %splice [ps_test_one_element_enum_with_num_tag_length] (gen_length_lemma (`test_one_element_enum_with_num_tag))
 #pop-options
 
@@ -418,7 +418,7 @@ type test_one_element_enum_with_tag =
 %splice [ps_test_one_element_enum_with_tag_is_well_formed] (gen_is_well_formed_lemma (`test_one_element_enum_with_tag))
 #pop-options
 
-#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0' --z3rlimit 25"
 %splice [ps_test_one_element_enum_with_tag_length] (gen_length_lemma (`test_one_element_enum_with_tag))
 #pop-options
 

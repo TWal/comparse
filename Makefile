@@ -12,7 +12,12 @@ FSTAR_EXE ?= $(FSTAR_HOME)/bin/fstar.exe
 FSTAR = $(FSTAR_EXE) $(MAYBE_ADMIT)
 
 FSTAR_EXTRACT = --extract '-* +Comparse -Comparse.Tactic'
-FSTAR_FLAGS = $(FSTAR_INCLUDE_DIRS) --cache_checked_modules --already_cached '+Prims +FStar' --warn_error '+241@247+285' --cache_dir cache --odir obj --cmi
+
+# Allowed warnings:
+# - (Warning 242) Definitions of inner let-rec ... and its enclosing top-level letbinding are not encoded to the solver, you will only be able to reason with their types
+# - (Warning 271) Pattern misses at least one bound variable
+# - (Warning 335) Interface ... is admitted without an implementation 
+FSTAR_FLAGS = $(FSTAR_INCLUDE_DIRS) --cache_checked_modules --already_cached '+Prims +FStar' --warn_error '@0..1000' --warn_error '+242+271-335' --cache_dir cache --odir obj --cmi
 
 .PHONY: all clean
 
@@ -53,6 +58,8 @@ obj:
 
 
 %.checked: FSTAR_RULE_FLAGS=
+# Comparse.Tests.TacticOutput is the only file allowing "(Warning 272) Top-level let-bindings must be total; this term may have effects"
+cache/Comparse.Tests.TacticOutput.fst.checked: FSTAR_RULE_FLAGS = --warn_error '+272'
 
 %.checked: | hints cache obj
 	$(FSTAR) $(FSTAR_FLAGS) $(FSTAR_RULE_FLAGS) $< && touch -c $@
