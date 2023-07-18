@@ -246,7 +246,7 @@ type test_tag_simple =
 %splice [ps_test_tag_simple_is_well_formed] (gen_is_well_formed_lemma (`test_tag_simple))
 #pop-options
 
-#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0'"
+#push-options "--fuel 0 --ifuel 1 --z3cliopt 'smt.qi.eager_threshold=0' --z3rlimit 25"
 %splice [ps_test_tag_simple_length] (gen_length_lemma (`test_tag_simple))
 #pop-options
 

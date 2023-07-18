@@ -100,7 +100,8 @@ let rec smart_mk_app_aux t args binders_to_copy =
     in
     smart_mk_app_aux (pack (Tv_App t (a_hd, real_q))) a_tl b_tl
   )
-  | _, _ -> fail ""
+  | _, [] -> fail "smart_mk_app_aux: inconsistent length (first arg too long)"
+  | [], _ -> fail "smart_mk_app_aux: inconsistent length (second arg too long)"
 
 val smart_mk_app: term -> list term -> Tac term
 let smart_mk_app t args =
@@ -132,10 +133,12 @@ let parser_from_type (bytes_term, bytes_like_term) t =
     let parser_unapplied = parser_term_from_type_fv fv in
     let parser_signature = tc (top_env ()) parser_unapplied in
     let expanded_type_args =
-      if is_parametrized_by_bytes_typeclass type_unapplied then
-        type_args
-      else
+      let parser_parametrized = is_parametrized_by_bytes_typeclass parser_unapplied in
+      let type_parametrized = is_parametrized_by_bytes_typeclass type_unapplied in
+      if parser_parametrized && not type_parametrized then
         (bytes_term, Q_Implicit)::(bytes_like_term, Q_Implicit)::type_args
+      else
+        type_args
     in
     (smart_mk_app parser_unapplied (List.Tot.map fst expanded_type_args), t)
   | Tv_Var _ -> (
@@ -688,40 +691,46 @@ let rec substitute_parser_in_term bi t =
 
 (*** Parser generator ***)
 
-val get_bytes_impl_and_parser_params: list binder -> Tac (bytes_impl & list binder)
-let get_bytes_impl_and_parser_params params =
-  let mk_bi_binders (): Tac (binder & binder) =
-    let b = pack_binder {
-      binder_bv = (fresh_bv_named "bytes");
-      binder_qual = Q_Implicit;
-      binder_attrs = [] ;
-      binder_sort = (`Type0);
-    } in
-    let bl = pack_binder {
-      binder_bv = (fresh_bv_named "bl");
-      binder_qual = (Q_Meta (`FStar.Tactics.Typeclasses.tcresolve));
-      binder_attrs = [];
-      binder_sort = (`(bytes_like (`#(binder_to_term b))));
-    } in
-    (b, bl)
-  in
-  let ((bytes_binder, bytes_like_binder), tail_params) =
-    match params with
-    | b::bl::tail_params -> (
-      let b_ok = ((type_of_binder b) `term_eq` (`Type0)) in
-      let bl_ok = ((type_of_binder bl) `term_eq` (mk_e_app (`bytes_like) [binder_to_term b])) in
-      let b_implicit = pack_binder {inspect_binder b with binder_qual = Q_Implicit} in
-      if b_ok && bl_ok then (
-        ((b_implicit, bl), tail_params)
-      ) else (
-        (mk_bi_binders (), params)
+val get_bytes_impl_and_parser_params: option bytes_impl -> list binder -> Tac (bytes_impl & list binder)
+let get_bytes_impl_and_parser_params opt_concrete_bi params =
+  match opt_concrete_bi with
+  | Some concrete_bi -> (
+    (concrete_bi, params)
+  )
+  | None -> (
+    let mk_bi_binders (): Tac (binder & binder) =
+      let b = pack_binder {
+        binder_bv = (fresh_bv_named "bytes");
+        binder_qual = Q_Implicit;
+        binder_attrs = [] ;
+        binder_sort = (`Type0);
+      } in
+      let bl = pack_binder {
+        binder_bv = (fresh_bv_named "bl");
+        binder_qual = (Q_Meta (`FStar.Tactics.Typeclasses.tcresolve));
+        binder_attrs = [];
+        binder_sort = (`(bytes_like (`#(binder_to_term b))));
+      } in
+      (b, bl)
+    in
+    let ((bytes_binder, bytes_like_binder), tail_params) =
+      match params with
+      | b::bl::tail_params -> (
+        let b_ok = ((type_of_binder b) `term_eq` (`Type0)) in
+        let bl_ok = ((type_of_binder bl) `term_eq` (mk_e_app (`bytes_like) [binder_to_term b])) in
+        let b_implicit = pack_binder {inspect_binder b with binder_qual = Q_Implicit} in
+        if b_ok && bl_ok then (
+          ((b_implicit, bl), tail_params)
+        ) else (
+          (mk_bi_binders (), params)
+        )
       )
-    )
-    | _ -> (mk_bi_binders (), params)
-  in
-  let bi = (binder_to_term bytes_binder, binder_to_term bytes_like_binder) in
-  let parser_params = bytes_binder::bytes_like_binder::tail_params in
-  (bi, parser_params)
+      | _ -> (mk_bi_binders (), params)
+    in
+    let bi = (binder_to_term bytes_binder, binder_to_term bytes_like_binder) in
+    let parser_params = bytes_binder::bytes_like_binder::tail_params in
+    (bi, parser_params)
+  )
 
 val is_tagged_type: list ctor -> Tac bool
 let is_tagged_type constructors =
@@ -736,6 +745,16 @@ let is_tagged_type constructors =
   )
 
 irreducible let can_be_unit = ()
+irreducible let with_bytes (bytes:Type0) {|bytes_like bytes|} = ()
+
+val get_optional_concrete_bytes_impl: sigelt -> Tac (option bytes_impl)
+let get_optional_concrete_bytes_impl sg =
+  match find_annotation_in_list (sigelt_attrs sg) (`with_bytes) with
+  | Some [bytes_term; bytes_like_term] -> (
+    Some (bytes_term, bytes_like_term)
+  )
+  | None -> None
+  | Some _ -> fail "get_optional_concrete_bytes_impl: malformed `with_bytes` annotation"
 
 val gen_parser_fun: term -> bool -> Tac (typ & term & bool)
 let gen_parser_fun type_fv force_smt =
@@ -748,14 +767,16 @@ let gen_parser_fun type_fv force_smt =
   in
   let parser_ty =
     match find_annotation_in_list (sigelt_attrs type_declaration) (`can_be_unit) with
-    | Some _ -> (`parser_serializer_prefix)
+    | Some [] -> (`parser_serializer_prefix)
     | None -> (`parser_serializer)
+    | Some _ -> fail "gen_parser_fun: malformed `can_be_unit` annotation"
   in
+  let opt_concrete_bi = get_optional_concrete_bytes_impl type_declaration in
   let (bi, result_parsed_type, parser_params, parser_fun_body, is_opaque) =
     match inspect_sigelt type_declaration with
     | Sg_Inductive name [] params typ constructors -> (
       guard (term_eq typ (`Type0) || term_eq typ (`eqtype)); //TODO this is a bit hacky
-      let (bi, parser_params) = get_bytes_impl_and_parser_params params in
+      let (bi, parser_params) = get_bytes_impl_and_parser_params opt_concrete_bi params in
       let result_parsed_type = apply_binders type_fv params in
       let (parser_fun_body, _) =
         if is_tagged_type constructors then (
@@ -774,7 +795,7 @@ let gen_parser_fun type_fv force_smt =
     | Sg_Inductive _ _ _ _ _ -> fail "gen_parser_fun: higher order types are not supported"
     | Sg_Let false [lb] -> (
       let (params, body) = collect_abs (inspect_lb lb).lb_def in
-      let (bi, parser_params) = get_bytes_impl_and_parser_params params in
+      let (bi, parser_params) = get_bytes_impl_and_parser_params opt_concrete_bi params in
       let result_parsed_type = apply_binders type_fv params in
       let parser_fun_body = substitute_parser_in_term bi body in
       (bi, result_parsed_type, parser_params, parser_fun_body, false)
@@ -785,7 +806,10 @@ let gen_parser_fun type_fv force_smt =
   let parser_fun = mk_abs parser_params parser_fun_body in
   let (bytes_term, bytes_like_term) = bi in
   let unparametrized_parser_type = mk_app parser_ty [bytes_term, Q_Explicit; bytes_like_term, Q_Implicit; result_parsed_type, Q_Explicit] in
-  let parser_type = mk_arr parser_params (pack_comp (C_Total unparametrized_parser_type)) in
+  let parser_type =
+    if Nil? parser_params then unparametrized_parser_type
+    else mk_arr parser_params (pack_comp (C_Total unparametrized_parser_type))
+  in
   (parser_type, parser_fun, is_opaque)
 
 val gen_parser_aux: term -> bool -> Tac decls

@@ -62,15 +62,15 @@ val mk_lemma_type_smtpat: term -> term -> Tac term
 let mk_lemma_type_smtpat ps_term x_term =
   `(prefixes_length (Mkparser_serializer_prefix?.serialize (`#ps_term) (`#x_term)))
 
-val mk_lemma_type: term -> list binder -> list ctor -> Tac term
-let mk_lemma_type type_unapplied params ctors =
+val mk_lemma_type: option GenerateParser.bytes_impl -> term -> list binder -> list ctor -> Tac term
+let mk_lemma_type opt_concrete_bi type_unapplied params ctors =
   let type_fv =
     match inspect type_unapplied with
     | Tv_FVar fv -> fv
     | _ -> fail ("mk_lemma_type: type_unapplied is not a fv: " ^ term_to_string type_unapplied)
   in
   let type_applied = apply_binders type_unapplied params in
-  let (bi, parser_params) = GenerateParser.get_bytes_impl_and_parser_params params in
+  let (bi, parser_params) = GenerateParser.get_bytes_impl_and_parser_params opt_concrete_bi params in
   let (bytes_term, bytes_like_term) = bi in
   let (ps_term, _) = GenerateParser.parser_from_type bi type_applied in
   let x_bv = fresh_bv_named "x" in
@@ -211,9 +211,10 @@ let gen_length_lemma_def type_fv =
   | Some x -> x
   | None -> fail "Type not found?"
   in
+  let opt_concrete_bi = GenerateParser.get_optional_concrete_bytes_impl type_declaration in
   match inspect_sigelt type_declaration with
   | Sg_Inductive name [] params typ constructors -> (
-    let lemma_type = mk_lemma_type type_fv params constructors in
+    let lemma_type = mk_lemma_type opt_concrete_bi type_fv params constructors in
     let lemma_val = mk_lemma_val lemma_type in
     (lemma_type,  lemma_val)
   )
