@@ -735,14 +735,21 @@ let is_tagged_type constructors =
     true
   )
 
-val gen_parser_fun: term -> term -> bool -> Tac (typ & term & bool)
-let gen_parser_fun parser_ty type_fv force_smt =
+irreducible let can_be_unit = ()
+
+val gen_parser_fun: term -> bool -> Tac (typ & term & bool)
+let gen_parser_fun type_fv force_smt =
   let env = top_env () in
   let type_name = get_name_from_fv type_fv in
   let type_declaration =
     match lookup_typ env type_name with
     | Some x -> x
     | None -> fail "Type not found?"
+  in
+  let parser_ty =
+    match find_annotation_in_list (sigelt_attrs type_declaration) (`can_be_unit) with
+    | Some _ -> (`parser_serializer_prefix)
+    | None -> (`parser_serializer)
   in
   let (bi, result_parsed_type, parser_params, parser_fun_body, is_opaque) =
     match inspect_sigelt type_declaration with
@@ -781,11 +788,11 @@ let gen_parser_fun parser_ty type_fv force_smt =
   let parser_type = mk_arr parser_params (pack_comp (C_Total unparametrized_parser_type)) in
   (parser_type, parser_fun, is_opaque)
 
-val gen_parser_aux: term -> term -> bool -> Tac decls
-let gen_parser_aux parser_ty type_fv force_smt =
+val gen_parser_aux: term -> bool -> Tac decls
+let gen_parser_aux type_fv force_smt =
   let type_name = get_name_from_fv type_fv in
   let parser_name = List.Tot.snoc (moduleof (top_env ()), "ps_" ^ (last type_name)) in
-  let (parser_type, parser_fun, is_opaque) = gen_parser_fun parser_ty type_fv force_smt in
+  let (parser_type, parser_fun, is_opaque) = gen_parser_fun type_fv force_smt in
   //dump (term_to_string parser_fun);
   //dump (term_to_string parser_type);
   let parser_letbinding = pack_lb ({
@@ -803,16 +810,8 @@ let gen_parser_aux parser_ty type_fv force_smt =
 
 val gen_parser: term -> Tac decls
 let gen_parser type_fv =
-  gen_parser_aux (`parser_serializer) type_fv false
-
-val gen_parser_prefix: term -> Tac decls
-let gen_parser_prefix type_fv =
-  gen_parser_aux (`parser_serializer_prefix) type_fv false
+  gen_parser_aux type_fv false
 
 val gen_parser_with_smt: term -> Tac decls
 let gen_parser_with_smt type_fv =
-  gen_parser_aux (`parser_serializer) type_fv true
-
-val gen_parser_prefix_with_smt: term -> Tac decls
-let gen_parser_prefix_with_smt type_fv =
-  gen_parser_aux (`parser_serializer_prefix) type_fv true
+  gen_parser_aux type_fv true
