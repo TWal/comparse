@@ -4,8 +4,6 @@ open Comparse.Parser.Builtins
 open Comparse.Parser.Derived
 open Comparse.Tactic
 
-(*** Features test ***)
-
 assume val test_ni: Type0
 assume val test_ne: Type0
 assume val test_ii: #bytes:Type0 -> {|bytes_like bytes|} -> Type0
@@ -497,62 +495,3 @@ noeq type test_dependent_sum (bytes:Type0) {|bytes_like bytes|} =
 %splice [ps_test_dependent_sum_serialize] (gen_serialize_lemma (`test_dependent_sum))
 #pop-options
 
-(*** Stress test ***)
-
-noeq type test_big_record (bytes:Type0) {|bytes_like bytes|} = {
-  f0:  test_ni;f1:  test_ni;f2:  test_ni;f3:  test_ni;f4:  test_ni;f5:  test_ni;f6:  test_ni;f7:  test_ni;
-  f8:  test_ni;f9:  test_ni;f10: test_ni;f11: test_ni;f12: test_ni;f13: test_ni;f14: test_ni;f15: test_ni;
-  f16: test_ni;f17: test_ni;f18: test_ni;f19: test_ni;f20: test_ni;f21: test_ni;f22: test_ni;f23: test_ni;
-  f24: test_ni;f25: test_ni;f26: test_ni;f27: test_ni;f28: test_ni;f29: test_ni;f30: test_ni;f31: test_ni;
-}
-
-#push-options "--fuel 0 --ifuel 0 --print_implicits"
-%splice [ps_test_big_record] (gen_parser (`test_big_record))
-#pop-options
-
-#push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0'"
-%splice [ps_test_big_record_is_well_formed] (gen_is_well_formed_lemma (`test_big_record))
-#pop-options
-
-// This one is a bit hard on the SMT, with the core typechecker
-//#push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0' --z3rlimit 500"
-//%splice [ps_test_big_record_length] (gen_length_lemma (`test_big_record))
-//#pop-options
-
-#push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0'"
-%splice [ps_test_big_record_serialize] (gen_serialize_lemma (`test_big_record))
-#pop-options
-
-noeq type test_big_sum (bytes:Type0) {|bytes_like bytes|} =
-  | TestBigSum_0:  test_ni -> test_big_sum bytes
-  | TestBigSum_1:  test_ni -> test_big_sum bytes
-  | TestBigSum_2:  test_ni -> test_big_sum bytes
-  | TestBigSum_3:  test_ni -> test_big_sum bytes
-  | TestBigSum_4:  test_ni -> test_big_sum bytes
-  | TestBigSum_5:  test_ni -> test_big_sum bytes
-  | TestBigSum_6:  test_ni -> test_big_sum bytes
-  | TestBigSum_7:  test_ni -> test_big_sum bytes
-  | TestBigSum_8:  test_ni -> test_big_sum bytes
-  | TestBigSum_9:  test_ni -> test_big_sum bytes
-  | TestBigSum_10: test_ni -> test_big_sum bytes
-  | TestBigSum_11: test_ni -> test_big_sum bytes
-  | TestBigSum_12: test_ni -> test_big_sum bytes
-  | TestBigSum_13: test_ni -> test_big_sum bytes
-  | TestBigSum_14: test_ni -> test_big_sum bytes
-  | TestBigSum_15: test_ni -> test_big_sum bytes
-
-#push-options "--fuel 0 --ifuel 1 --print_implicits"
-%splice [ps_test_big_sum] (gen_parser (`test_big_sum))
-#pop-options
-
-#push-options "--fuel 0 --ifuel 1 --z3rlimit 100 --z3cliopt 'smt.qi.eager_threshold=0'"
-%splice [ps_test_big_sum_is_well_formed] (gen_is_well_formed_lemma (`test_big_sum))
-#pop-options
-
-#push-options "--fuel 0 --ifuel 1 --z3rlimit 100 --z3cliopt 'smt.qi.eager_threshold=0'"
-%splice [ps_test_big_sum_length] (gen_length_lemma (`test_big_sum))
-#pop-options
-
-#push-options "--fuel 0 --ifuel 1 --z3rlimit 100 --z3cliopt 'smt.qi.eager_threshold=0'"
-%splice [ps_test_big_sum_serialize] (gen_serialize_lemma (`test_big_sum))
-#pop-options
