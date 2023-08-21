@@ -439,8 +439,10 @@ let ps_nat_accelerate #bytes #bl ps_nat_slow =
     (fun (|nbytes, n|) -> n)
     (fun n -> (|nbytes_prefix n, n|))
 
+#push-options "--z3rlimit 15"
 let ps_true_nat #bytes #bl =
   mk_isomorphism (refined nat true_nat_pred) (ps_nat_accelerate ps_nat_unary) (fun n -> n) (fun n -> n)
+#pop-options
 
 (*** QUIC-style length ***)
 
