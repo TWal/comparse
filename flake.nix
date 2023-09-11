@@ -17,9 +17,9 @@
       inherit fstar comparse;
     };
     defaultPackage.${system} = comparse;
-    hydraJobs = {
-      comparse-build.${system} = comparse;
-      comparse-tests.${system} = comparse.tests;
+    checks.${system} = {
+      comparse-build = comparse;
+      comparse-tests = comparse.tests;
     };
   };
 }
