@@ -14,9 +14,9 @@
     comparse = pkgs.callPackage ./default.nix {inherit fstar z3 fstar-dune; ocamlPackages = pkgs.ocaml-ng.ocamlPackages_4_14;};
   in {
     packages.${system} = {
+      default = comparse;
       inherit fstar comparse;
     };
-    defaultPackage.${system} = comparse;
     checks.${system} = {
       comparse-build = comparse;
       comparse-tests = comparse.tests;
