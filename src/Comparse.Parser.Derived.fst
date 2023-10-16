@@ -410,6 +410,7 @@ let ps_nat_unary_is_well_formed #bytes #bl pre x =
 open FStar.Mul
 
 // Use a "slow" nat parser to derive a more compact one
+#push-options "--z3rlimit 25"
 val ps_nat_accelerate: #bytes:Type0 -> {|bytes_like bytes|} -> parser_serializer bytes nat -> parser_serializer bytes nat
 let ps_nat_accelerate #bytes #bl ps_nat_slow =
   let nbytes_prefix (n:nat): Pure nat (requires True) (ensures fun res -> (n == 0 /\ res == 0) \/ (pow2 (8 * res) <= n /\ n < pow2 (8 * (res+1)))) = (find_nbytes n) - 1 in
@@ -438,6 +439,7 @@ let ps_nat_accelerate #bytes #bl ps_nat_slow =
     )
     (fun (|nbytes, n|) -> n)
     (fun n -> (|nbytes_prefix n, n|))
+#pop-options
 
 #push-options "--z3rlimit 15"
 let ps_true_nat #bytes #bl =
