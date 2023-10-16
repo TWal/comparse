@@ -2,9 +2,9 @@ module Comparse.Bytes.Typeclass
 
 open FStar.Mul
 
-type nat_lbytes (sz:nat) = n:nat{n < normalize_term (pow2 (8*sz))}
+type nat_lbytes (sz:nat) = n:nat{n < pow2 (8*sz)}
 
-val nat_lbytes_helper: sz:nat -> Lemma (normalize_term (pow2 (8*sz)) == pow2 (8*sz))
+val nat_lbytes_helper: sz:nat -> Lemma (pow2 (8*sz) == normalize_term (pow2 (8*sz)))
 [SMTPat (nat_lbytes sz)]
 
 /// Minimal interface to manipulate symbolic bytes.
