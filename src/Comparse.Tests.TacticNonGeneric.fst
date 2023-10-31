@@ -76,3 +76,26 @@ noeq type test_is_parser_for = {
 #push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0'"
 %splice [ps_test_is_parser_for_serialize] (gen_serialize_lemma (`test_is_parser_for))
 #pop-options
+
+[@@ with_bytes my_bytes]
+noeq type test_bytes = {
+  f_ni: test_ni;
+  f_specific: test_specific;
+  f_bytes: my_bytes;
+}
+
+#push-options "--fuel 0 --ifuel 0 --print_implicits"
+%splice [ps_test_bytes] (gen_parser (`test_bytes))
+#pop-options
+
+#push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_bytes_is_well_formed] (gen_is_well_formed_lemma (`test_bytes))
+#pop-options
+
+#push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_bytes_length] (gen_length_lemma (`test_bytes))
+#pop-options
+
+#push-options "--fuel 0 --ifuel 0 --z3cliopt 'smt.qi.eager_threshold=0'"
+%splice [ps_test_bytes_serialize] (gen_serialize_lemma (`test_bytes))
+#pop-options
