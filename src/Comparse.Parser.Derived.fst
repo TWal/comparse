@@ -592,6 +592,7 @@ let ps_quic_nat #bytes #bl =
     a_to_b b_to_a
     a_to_b_to_a
     b_to_a_to_b
+#pop-options
 
 let ps_quic_nat_length #bytes #bl n =
   assert_norm(pow2 0 == 1);
