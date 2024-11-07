@@ -66,6 +66,6 @@ let mk_parseable_serializeable_from_whole #bytes #bl #a ps_a = {
 
 val mk_parseable_serializeable:
   #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type ->
-  ps_a:parser_serializer bytes a -> parseable_serializeable bytes a
+  ps_a:parser_serializer_prefix bytes a -> parseable_serializeable bytes a
 let mk_parseable_serializeable #bytes #bl #a ps_a =
   mk_parseable_serializeable_from_whole (ps_prefix_to_ps_whole ps_a)
