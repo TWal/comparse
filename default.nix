@@ -1,4 +1,4 @@
-{lib, stdenv, which, fstar, fstar-dune, z3, ocamlPackages}:
+{lib, stdenv, which, fstar, z3, ocamlPackages}:
 
 let
   comparse = stdenv.mkDerivation {
@@ -34,7 +34,7 @@ let
       ++ (with ocamlPackages; [
         ocaml dune_3 findlib
       ])
-      ++ (fstar-dune.buildInputs);
+      ++ (fstar.buildInputs);
     # pre-patch uses build output from comparse, to avoid building things twice
     prePatch = ''
       cp -pr --no-preserve=mode ${comparse}/cache ${comparse}/ml .

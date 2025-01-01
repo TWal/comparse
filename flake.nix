@@ -10,8 +10,7 @@
     pkgs = import nixpkgs { inherit system; };
     z3 = fstar-flake.packages.${system}.z3;
     fstar = fstar-flake.packages.${system}.fstar;
-    fstar-dune = fstar-flake.packages.${system}.fstar-dune;
-    comparse = pkgs.callPackage ./default.nix {inherit fstar z3 fstar-dune; ocamlPackages = pkgs.ocaml-ng.ocamlPackages_4_14;};
+    comparse = pkgs.callPackage ./default.nix {inherit fstar z3; ocamlPackages = pkgs.ocaml-ng.ocamlPackages_4_14;};
   in {
     packages.${system} = {
       inherit fstar comparse;
