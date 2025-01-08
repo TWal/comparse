@@ -1,4 +1,4 @@
-FSTAR_HOME ?= $(dir $(shell which fstar.exe))/..
+FSTAR_EXE ?= fstar.exe
 
 SOURCE_DIR = src
 
@@ -8,7 +8,6 @@ FSTAR_INCLUDE_DIRS = $(addprefix --include , $(INCLUDE_DIRS))
 ADMIT ?=
 MAYBE_ADMIT = $(if $(ADMIT),--admit_smt_queries true)
 
-FSTAR_EXE ?= $(FSTAR_HOME)/bin/fstar.exe
 FSTAR = $(FSTAR_EXE) $(MAYBE_ADMIT)
 
 FSTAR_EXTRACT = --extract '-* +Comparse -Comparse.Tactic'
@@ -94,4 +93,4 @@ copy_tests: extract_tests
 	cp $(ALL_TEST_ML_FILES) ml/tests/src
 
 check: copy_lib copy_tests
-	OCAMLPATH=$(FSTAR_HOME)/lib:$(OCAMLPATH) dune runtest --no-buffer --profile=release
+	$(FSTAR_EXE) --ocamlenv dune runtest --no-buffer --profile=release
