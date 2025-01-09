@@ -137,7 +137,7 @@ let prefixes_length (#bytes:Type) {|bytes_like bytes|} (l:list bytes) =
 ///       }
 ///   } optional<T>;
 
-val is_not_unit: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:parser_serializer_prefix bytes a -> Type0
+val is_not_unit: #bytes:Type0 -> {|bytes_like bytes|} -> #a:Type -> ps_a:parser_serializer_prefix bytes a -> prop
 
 /// We define a special type for message formats with non-extensibility and non-emptiness,
 /// because they are the most common ones we encounter in the wild.

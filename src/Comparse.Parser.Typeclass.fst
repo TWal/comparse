@@ -30,7 +30,7 @@ val serialize_parse_inv_lemma: #bytes:Type0 -> {|bytes_like bytes|} -> a:Type ->
 let serialize_parse_inv_lemma #bytes #bl a #ps buf =
   ps.base.serialize_parse_inv buf
 
-val is_well_formed: #bytes:Type0 -> {|bytes_like bytes|} -> a:Type -> {|parseable_serializeable bytes a|} -> bytes_compatible_pre bytes -> a -> Type0
+val is_well_formed: #bytes:Type0 -> {|bytes_like bytes|} -> a:Type -> {|parseable_serializeable bytes a|} -> bytes_compatible_pre bytes -> a -> prop
 let is_well_formed #bytes #bl a #ps pre x =
   is_well_formed_whole ps.base pre x
 
