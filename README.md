@@ -7,8 +7,8 @@ Read the Comparse paper:
 ## Dependencies
 
 The Makefile expects either to have `fstar.exe` in the PATH,
-or to have the `FSTAR_HOME` environment variable set.
-To run the tests, `dune` is required.
+or to have the `FSTAR_EXE` environment variable set to the path
+for `fstar.exe`. To run the tests, `dune` is required.
 
 Otherwise, using Nix, all the dependencies are fetched automatically.
 
