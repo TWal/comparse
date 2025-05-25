@@ -109,14 +109,6 @@ noeq type parser_serializer_prefix (bytes:Type0) {|bytes_like bytes|} (a:Type) =
 ///
 /// -- End parenthesis about symbolic bytes --
 
-let rec for_allP (#a:Type) (pre:a -> prop) (l:list a): prop =
-    match l with
-    | [] -> True
-    | h::t -> pre h /\ for_allP pre t
-
-val for_allP_eq: #a:Type -> pre:(a -> prop) -> l:list a ->
-  Lemma (for_allP pre l <==> (forall x. List.Tot.memP x l ==> pre x))
-
 [@@"opaque_to_smt"]
 let prefixes_length (#bytes:Type) {|bytes_like bytes|} (l:list bytes) =
   let add (x:nat) (y:nat): nat = x+y in

@@ -2,13 +2,6 @@ module Comparse.Parser.Builtins
 
 #set-options "--fuel 0 --ifuel 2"
 
-#push-options "--fuel 1"
-let rec for_allP_eq #a pre l =
-  match l with
-  | [] -> ()
-  | h::t -> for_allP_eq pre t
-#pop-options
-
 let is_not_unit #bytes #bl #a ps_a = forall (x:a). 1 <= prefixes_length (ps_a.serialize x)
 
 let is_well_formed_prefix_weaken #bytes #bl #a ps_a pre_strong pre_weak x =
