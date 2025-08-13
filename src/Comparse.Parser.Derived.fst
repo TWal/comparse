@@ -594,8 +594,10 @@ let ps_quic_nat #bytes #bl =
     b_to_a_to_b
 #pop-options
 
+#push-options "--z3rlimit 50"
 let ps_quic_nat_length #bytes #bl n =
   assert_norm(pow2 0 == 1);
   assert_norm(pow2 1 == 2);
   assert_norm(pow2 2 == 4);
   assert_norm(pow2 3 == 8)
+#pop-options
