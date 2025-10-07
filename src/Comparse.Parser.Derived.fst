@@ -102,8 +102,11 @@ val list_unrefb_refb:
   Lemma (list_unrefb #a #p (list_refb #a #p l) == l)
 let rec list_unrefb_refb #a #p l =
   match l with
-  | [] -> ()
-  | h::t -> list_unrefb_refb #a #p t
+  | [] ->
+    assert_norm(list_unrefb #a #p (list_refb #a #p []) == [])
+  | h::t ->
+    list_unrefb_refb #a #p t;
+    assert_norm(list_unrefb #a #p (list_refb #a #p (h::t)) == h::list_unrefb #a #p (list_refb #a #p (t)))
 #pop-options
 
 #push-options "--ifuel 1 --fuel 1"
@@ -441,7 +444,7 @@ let ps_nat_accelerate #bytes #bl ps_nat_slow =
     (fun n -> (|nbytes_prefix n, n|))
 #pop-options
 
-#push-options "--z3rlimit 15"
+#push-options "--z3rlimit 25"
 let ps_true_nat #bytes #bl =
   mk_isomorphism (refined nat true_nat_pred) (ps_nat_accelerate ps_nat_unary) (fun n -> n) (fun n -> n)
 #pop-options
