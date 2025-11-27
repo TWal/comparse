@@ -25,7 +25,7 @@ let rec find_annotation_in_list l expected_hd =
 
 val find_annotation_in_binder: binder -> term -> Tac (option (list term))
 let find_annotation_in_binder b expected_hd =
-  find_annotation_in_list (inspect_binder b).binder_attrs expected_hd
+  find_annotation_in_list b.attrs expected_hd
 
 (*** Handle `is_parser` attribute ***)
 
@@ -93,7 +93,7 @@ let rec smart_mk_app_aux t args binders_to_copy =
   | [], [] -> t
   | a_hd::a_tl, b_hd::b_tl -> (
     let real_q = (
-      match (inspect_binder b_hd).binder_qual with
+      match b_hd.qual with
       | Q_Meta _ -> Q_Implicit
       | q -> q
     )
@@ -115,8 +115,8 @@ let is_parametrized_by_bytes_typeclass typ =
   let (typ_typ_args, _) = collect_arr_bs typ_typ in
   match typ_typ_args with
   | b::bl::_ -> (
-    let b_type = type_of_binder b in
-    let bl_type = type_of_binder bl in
+    let b_type = b.sort in
+    let bl_type = bl.sort in
     let b_ok = (b_type `term_eq` (`Type0)) in
     let bl_ok = (bl_type `term_eq` (mk_e_app (`bytes_like) [binder_to_term b])) in
     b_ok && bl_ok
@@ -153,9 +153,9 @@ val parser_from_binder: bytes_impl -> binder -> Tac parser_term
 let parser_from_binder bi b =
   match find_annotation_in_binder b (`with_parser) with
   | None ->
-    parser_from_type bi (type_of_binder b)
+    parser_from_type bi b.sort
   | Some [bytes_term; bytes_like_term; typ; ps_typ] ->
-    guard (term_eq typ (type_of_binder b));
+    guard (term_eq typ b.sort);
     (ps_typ, typ)
   | Some _ -> fail "parser_from_binder: malformed annotation"
 
@@ -188,36 +188,43 @@ val mkdtuple2_fv: unit -> Tac fv
 let mkdtuple2_fv () =
   pack_fv (explode_qn (`%Mkdtuple2))
 
-val mk_destruct_pairs: list binder -> Tac (pattern & list bv)
+val mk_destruct_pairs: list binder -> Tac (pattern & list binder)
 let rec mk_destruct_pairs l =
   match l with
-  | [] -> (Pat_Constant C_Unit, [])
+  | [] -> (Pat_Constant {c = C_Unit}, [])
   | [h] -> (
-    let bv_h = bv_of_binder h in
-    (Pat_Var bv_h (seal (type_of_binder h)), [bv_h])
+    (Pat_Var {
+      v = h;
+      sort = (seal h.sort)
+    }, [h])
   )
   | h::t -> (
-    let bv_h = bv_of_binder h in
-    let (pattern_t, bv_t) = mk_destruct_pairs t in
-    let pattern = Pat_Cons (mkdtuple2_fv ()) None [(Pat_Var bv_h (seal (type_of_binder h)), false); (pattern_t, false)] in
-    let bvs = bv_h::bv_t in
-    (pattern, bvs)
+    let (pattern_t, binder_t) = mk_destruct_pairs t in
+    let pattern = Pat_Cons {
+      head = (mkdtuple2_fv ());
+      univs = None;
+      subpats = [(Pat_Var {
+        v = h;
+        sort = (seal h.sort);
+      }, false); (pattern_t, false)];
+    } in
+    (pattern, h::binder_t)
   )
 
-val mk_construct_record: name -> list bv -> Tac term
+val mk_construct_record: name -> list binder -> Tac term
 let mk_construct_record constructor_name bvs =
   let constructor_term = (pack (Tv_FVar (pack_fv constructor_name))) in
-  let constructor_args = Tactics.Util.map (fun bv -> (pack (Tv_Var bv), Q_Explicit)) bvs in
+  let constructor_args = Tactics.Util.map (fun (bv: binder) -> (pack (Tv_Var bv), Q_Explicit)) bvs in
   mk_app constructor_term constructor_args
 
 val mk_record_isomorphism_f: typ -> name -> list binder -> Tac term
 let mk_record_isomorphism_f result_type constructor_name constructor_binders =
   let (match_pattern, bvs) = mk_destruct_pairs constructor_binders in
   let match_body = mk_construct_record constructor_name bvs in
-  let x_bv = fresh_bv () in
-  pack (Tv_Abs (mk_binder x_bv result_type) (pack (Tv_Match (pack (Tv_Var x_bv)) None [(match_pattern, match_body)])))
+  let x_binder = fresh_binder result_type in
+  pack (Tv_Abs x_binder (pack (Tv_Match (pack (Tv_Var x_binder)) None [(match_pattern, match_body)])))
 
-val mk_construct_pairs: list bv -> Tac term
+val mk_construct_pairs: list binder -> Tac term
 let rec mk_construct_pairs l =
   match l with
   | [] -> (`())
@@ -227,10 +234,14 @@ let rec mk_construct_pairs l =
 
 val mk_record_isomorphism_g: typ -> name -> list binder -> Tac term
 let mk_record_isomorphism_g input_type constructor_name constructor_binders =
-  let match_pattern = Pat_Cons (pack_fv constructor_name) None (Tactics.Util.map (fun b -> (Pat_Var (bv_of_binder b) (seal (type_of_binder b)), false)) constructor_binders) in
-  let match_body = mk_construct_pairs (Tactics.Util.map (fun b -> bv_of_binder b) constructor_binders) in
-  let x_bv = fresh_bv () in
-  pack (Tv_Abs (mk_binder x_bv input_type) (pack (Tv_Match (pack (Tv_Var x_bv)) None [(match_pattern, match_body)])))
+  let match_pattern = Pat_Cons {
+    head = (pack_fv constructor_name);
+    univs = None;
+    subpats = (Tactics.Util.map (fun (b: binder) -> (Pat_Var {v = b; sort = (seal b.sort)}, false)) constructor_binders);
+  } in
+  let match_body = mk_construct_pairs constructor_binders in
+  let x_binder = fresh_binder input_type in
+  pack (Tv_Abs (x_binder) (pack (Tv_Match (pack (Tv_Var x_binder)) None [(match_pattern, match_body)])))
 
 val dtuple2_ind: #a:Type -> #b:(a -> Type) -> p:((x:a & b x) -> Type0) -> squash (forall (x:a) (y:b x). p (|x, y|)) -> Lemma (forall xy. p xy)
 let dtuple2_ind #a #b p _ = ()
@@ -357,14 +368,14 @@ let get_tag_from_ctors ctors =
 val mk_tag_parser: bytes_impl -> typ -> list term -> Tac parser_term
 let mk_tag_parser bi tag_typ tag_vals =
   let pred =
-    let tag_bv = fresh_bv () in
-    let tag_term = pack (Tv_Var tag_bv) in
+    let tag_binder = fresh_binder tag_typ in
+    let tag_term = pack (Tv_Var tag_binder) in
     let mk_equality v1 v2 = mk_ie_app (`op_Equality) [tag_typ] [v1; v2] in
     let mk_disj value acc: Tac term = `(((`#(mk_equality tag_term value))) || (`#acc)) in
     guard (Cons? tag_vals);
     let tag_vals_head::tag_vals_tail = tag_vals in
     let disj = FStar.Tactics.fold_right mk_disj tag_vals_tail (`((`#(mk_equality tag_term tag_vals_head)))) in
-    pack (Tv_Abs (mk_binder tag_bv tag_typ) disj)
+    pack (Tv_Abs tag_binder disj)
   in
   let (tag_parser, tag_typ) = parser_from_type bi tag_typ in
   (mk_ie_app (apply_implicit_bytes_impl (`refine) bi) [tag_typ] [tag_parser; pred], mk_e_app (`refined) [tag_typ; pred])
@@ -376,10 +387,14 @@ let rec term_to_pattern t =
   match inspect hd with
   | Tv_UInst fv _
   | Tv_FVar fv ->
-    Pat_Cons fv None args_pat
+    Pat_Cons {
+      head = fv;
+      univs = None;
+      subpats = args_pat;
+    }
   | Tv_Const c ->
     guard (List.Tot.length args = 0);
-    Pat_Constant c
+    Pat_Constant {c}
   | _ -> fail ("term_to_pattern: term type not handled (not fv or const). Term: `" ^ term_to_string t ^ "`")
 
 val mk_middle_sum_type_parser: bytes_impl -> parser_term -> list term -> list ctor -> Tac (parser_term & term)
@@ -393,8 +408,8 @@ let mk_middle_sum_type_parser bi (tag_parser, tag_typ) tag_vals ctors =
       ctors
   in
   let (tag_to_pair_type_term, tag_to_pair_parser_term) =
-    let tag_bv = fresh_bv () in
-    let tag_term = pack (Tv_Var tag_bv) in
+    let tag_binder = fresh_binder tag_typ in
+    let tag_term = pack (Tv_Var tag_binder) in
     // Should be provable, but a dynamic check is enough
     guard (List.Tot.length tag_vals = List.Tot.length pair_parsers);
     let (branches_typ, branches_term) =
@@ -408,8 +423,8 @@ let mk_middle_sum_type_parser bi (tag_parser, tag_typ) tag_vals ctors =
       )
     in
     (
-      pack (Tv_Abs (mk_binder tag_bv tag_typ) (pack (Tv_Match tag_term None branches_typ))),
-      pack (Tv_Abs (mk_binder tag_bv tag_typ) (pack (Tv_Match tag_term None branches_term)))
+      pack (Tv_Abs tag_binder (pack (Tv_Match tag_term None branches_typ))),
+      pack (Tv_Abs tag_binder (pack (Tv_Match tag_term None branches_term)))
     )
   in
   let middle_parser = mk_ie_app (apply_implicit_bytes_impl (`bind) bi) [tag_typ; tag_to_pair_type_term] [tag_parser; tag_to_pair_parser_term] in
@@ -425,15 +440,18 @@ let mk_middle_to_sum_fun tag_typ tag_to_pair_typ tag_vals ctors =
         let binders, _ = collect_arr_bs ctor_typ in
         let (pair_pattern, bvs) = mk_destruct_pairs binders in
         let rec_term = mk_construct_record ctor_name bvs in
-        let bvs = Tactics.Util.map (fun b -> bv_of_binder b) binders in
-        let pattern = Pat_Cons (mkdtuple2_fv ()) None [(term_to_pattern tag_val, false); (pair_pattern, false)] in
+        let pattern = Pat_Cons {
+          head = (mkdtuple2_fv ());
+          univs = None;
+          subpats = [(term_to_pattern tag_val, false); (pair_pattern, false)];
+        } in
         (pattern, rec_term)
       )
       (List.Pure.zip tag_vals ctors)
   in
-  let pair_bv = fresh_bv () in
   let pair_typ = mk_e_app (`dtuple2) [tag_typ; tag_to_pair_typ] in
-  pack (Tv_Abs (mk_binder pair_bv pair_typ) (pack (Tv_Match (pack (Tv_Var pair_bv)) None branches)))
+  let pair_binder = fresh_binder pair_typ in
+  pack (Tv_Abs pair_binder (pack (Tv_Match (pack (Tv_Var pair_binder)) None branches)))
 
 val mk_sum_to_middle_fun: typ -> list term -> list ctor -> Tac term
 let mk_sum_to_middle_fun sum_typ tag_vals ctors =
@@ -442,15 +460,19 @@ let mk_sum_to_middle_fun sum_typ tag_vals ctors =
     Tactics.Util.map
       (fun (tag_val, (ctor_name, ctor_typ)) ->
         let (ctor_binders, _) = collect_arr_bs ctor_typ in
-        let match_pattern = Pat_Cons (pack_fv ctor_name) None (Tactics.Util.map (fun b -> (Pat_Var (bv_of_binder b) (seal (binder_to_term b)), false)) ctor_binders) in
-        let pairs_term = mk_construct_pairs (Tactics.Util.map (fun b -> bv_of_binder b) ctor_binders) in
+        let match_pattern = Pat_Cons {
+          head = pack_fv ctor_name;
+          univs = None;
+          subpats = Tactics.Util.map (fun (b:binder) -> (Pat_Var {v = b; sort = seal b.sort}, false)) ctor_binders;
+        } in
+        let pairs_term = mk_construct_pairs ctor_binders in
         let match_body = mk_e_app (`Mkdtuple2) [tag_val; pairs_term] in
         (match_pattern, match_body)
       )
       (List.Pure.zip tag_vals ctors)
   in
-  let sum_bv = fresh_bv () in
-  pack (Tv_Abs (mk_binder sum_bv sum_typ) (pack (Tv_Match (pack (Tv_Var sum_bv)) None branches)))
+  let sum_binder = fresh_binder sum_typ in
+  pack (Tv_Abs sum_binder (pack (Tv_Match (pack (Tv_Var sum_binder)) None branches)))
 
 val refined_ind: a:Type -> pred:(a -> bool) -> p:(refined a pred -> Type0) -> squash (forall (x:a). pred x ==> p x) -> squash (forall (x:refined a pred). p x)
 let refined_ind a pred p _ = ()
@@ -595,13 +617,13 @@ let mk_tag_to_open_enum tag_typ ctors open_ctor =
       ctors
   in
   let branch_open =
-    let tag_bv = fresh_bv () in
+    let tag_binder = fresh_binder tag_typ in
     let (open_ctor_name, _) = open_ctor in
-    (Pat_Var tag_bv (seal tag_typ), mk_e_app (pack (Tv_FVar (pack_fv open_ctor_name))) [pack (Tv_Var tag_bv)])
+    (Pat_Var {v = tag_binder; sort = (seal tag_typ)}, mk_e_app (pack (Tv_FVar (pack_fv open_ctor_name))) [pack (Tv_Var tag_binder)])
   in
   let branches = branches_closed @ [branch_open] in
-  let tag_bv = fresh_bv () in
-  pack (Tv_Abs (mk_binder tag_bv tag_typ) (pack (Tv_Match (pack (Tv_Var tag_bv)) None branches)))
+  let tag_binder = fresh_binder tag_typ in
+  pack (Tv_Abs tag_binder (pack (Tv_Match (pack (Tv_Var tag_binder)) None branches)))
 
 val mk_open_enum_to_tag: typ -> typ -> list ctor -> ctor -> Tac term
 let mk_open_enum_to_tag tag_typ open_enum_typ ctors open_ctor =
@@ -612,18 +634,26 @@ let mk_open_enum_to_tag tag_typ open_enum_typ ctors open_ctor =
         let opt_tag = get_tag_from_ctor ctor in
         guard (Some? opt_tag);
         let (tag_typ, tag_val) = Some?.v opt_tag in
-        (Pat_Cons (pack_fv ctor_name) None [], tag_val)
+        (Pat_Cons {
+          head = pack_fv ctor_name;
+          univs = None;
+          subpats = [];
+        }, tag_val)
       )
       ctors
   in
   let branch_open =
-    let tag_bv = fresh_bv () in
+    let tag_binder = fresh_binder tag_typ in
     let (open_ctor_name, _) = open_ctor in
-    (Pat_Cons (pack_fv open_ctor_name) None [Pat_Var tag_bv (seal tag_typ), false], pack (Tv_Var tag_bv))
+    (Pat_Cons {
+      head = pack_fv open_ctor_name;
+      univs = None;
+      subpats = [Pat_Var {v = tag_binder; sort = (seal tag_typ)}, false];
+    }, pack (Tv_Var tag_binder))
   in
   let branches = branches_closed @ [branch_open] in
-  let x_bv = fresh_bv () in
-  pack (Tv_Abs (mk_binder x_bv open_enum_typ) (pack (Tv_Match (pack (Tv_Var x_bv)) None branches)))
+  let x_binder = fresh_binder open_enum_typ in
+  pack (Tv_Abs x_binder (pack (Tv_Match (pack (Tv_Var x_binder)) None branches)))
 
 val mk_open_enum_isomorphism: bytes_impl -> parser_term -> typ -> list ctor -> ctor -> Tac parser_term
 let mk_open_enum_isomorphism bi (tag_parser, tag_typ) open_enum_typ ctors open_ctor =
@@ -669,8 +699,8 @@ let rec substitute_parser_in_term bi t =
       branches
     in
     pack (Tv_Match scrutinee ret new_branches)
-  | Tv_Let recf attrs bv ty def body ->
-    pack (Tv_Let recf attrs bv ty def (substitute_parser_in_term bi body))
+  | Tv_Let recf attrs b def body ->
+    pack (Tv_Let recf attrs b def (substitute_parser_in_term bi body))
   // Remove type ascription because sometimes F* gives us (...) <: Type0
   | Tv_AscribedC e c tac use_eq -> substitute_parser_in_term bi e
   | Tv_AscribedT e t tac use_eq -> substitute_parser_in_term bi e
@@ -695,26 +725,31 @@ let get_bytes_impl_and_parser_params opt_concrete_bi params =
   )
   | None -> (
     let mk_bi_binders (): Tac (binder & binder) =
-      let b = pack_binder {
-        binder_bv = (fresh_bv_named "bytes");
-        binder_qual = Q_Implicit;
-        binder_attrs = [] ;
-        binder_sort = (`Type0);
+
+      let b_uniq = fresh () in
+      let b: binder = {
+        ppname = seal "bytes";
+        sort   = (`Type0);
+        uniq   = b_uniq;
+        qual   = Q_Implicit;
+        attrs  = [] ;
       } in
-      let bl = pack_binder {
-        binder_bv = (fresh_bv_named "bl");
-        binder_qual = (Q_Meta (`FStar.Tactics.Typeclasses.tcresolve));
-        binder_attrs = [];
-        binder_sort = (`(bytes_like (`#(binder_to_term b))));
+      let bl_uniq = fresh () in
+      let bl: binder = {
+        ppname = seal "bl";
+        sort   = (`(bytes_like (`#(binder_to_term b))));
+        uniq   = bl_uniq;
+        qual   = (Q_Meta (`FStar.Tactics.Typeclasses.tcresolve));
+        attrs  = [] ;
       } in
       (b, bl)
     in
     let ((bytes_binder, bytes_like_binder), tail_params) =
       match params with
       | b::bl::tail_params -> (
-        let b_ok = ((type_of_binder b) `term_eq` (`Type0)) in
-        let bl_ok = ((type_of_binder bl) `term_eq` (mk_e_app (`bytes_like) [binder_to_term b])) in
-        let b_implicit = pack_binder {inspect_binder b with binder_qual = Q_Implicit} in
+        let b_ok = (b.sort `term_eq` (`Type0)) in
+        let bl_ok = (bl.sort `term_eq` (mk_e_app (`bytes_like) [binder_to_term b])) in
+        let b_implicit = {b with qual = Q_Implicit} in
         if b_ok && bl_ok then (
           ((b_implicit, bl), tail_params)
         ) else (
@@ -770,7 +805,7 @@ let gen_parser_fun type_fv force_smt =
   let opt_concrete_bi = get_optional_concrete_bytes_impl type_declaration in
   let (bi, result_parsed_type, parser_params, parser_fun_body, is_opaque) =
     match inspect_sigelt type_declaration with
-    | Sg_Inductive name [] params typ constructors -> (
+    | Sg_Inductive { nm = name; univs = []; params; typ; ctors = constructors;} -> (
       guard (term_eq typ (`Type0) || term_eq typ (`eqtype)); //TODO this is a bit hacky
       let (bi, parser_params) = get_bytes_impl_and_parser_params opt_concrete_bi params in
       let result_parsed_type = apply_binders type_fv params in
@@ -788,15 +823,15 @@ let gen_parser_fun type_fv force_smt =
       in
       (bi, result_parsed_type, parser_params, parser_fun_body, true)
     )
-    | Sg_Inductive _ _ _ _ _ -> fail "gen_parser_fun: higher order types are not supported"
-    | Sg_Let false [lb] -> (
-      let (params, body) = collect_abs (inspect_lb lb).lb_def in
+    | Sg_Inductive _ -> fail "gen_parser_fun: higher order types are not supported"
+    | Sg_Let {isrec = false; lbs = [lb];} -> (
+      let (params, body) = collect_abs lb.lb_def in
       let (bi, parser_params) = get_bytes_impl_and_parser_params opt_concrete_bi params in
       let result_parsed_type = apply_binders type_fv params in
       let parser_fun_body = substitute_parser_in_term bi body in
       (bi, result_parsed_type, parser_params, parser_fun_body, false)
     )
-    | Sg_Let _ _ -> fail "gen_parser_fun: recursive lets are not supported"
+    | Sg_Let _ -> fail "gen_parser_fun: recursive lets are not supported"
     | _ -> fail "gen_parser_fun: only inductives are supported"
   in
   let parser_fun = mk_abs parser_params parser_fun_body in
@@ -815,13 +850,13 @@ let gen_parser_aux type_fv force_smt =
   let (parser_type, parser_fun, is_opaque) = gen_parser_fun type_fv force_smt in
   //dump (term_to_string parser_fun);
   //dump (term_to_string parser_type);
-  let parser_letbinding = pack_lb ({
+  let parser_letbinding = {
     lb_fv = pack_fv parser_name;
     lb_us = [];
     lb_typ = parser_type;
     lb_def = parser_fun;
-  }) in
-  let sv = pack_sigelt (Sg_Let false [parser_letbinding]) in
+  } in
+  let sv = pack_sigelt (Sg_Let { isrec = false; lbs = [parser_letbinding];}) in
   let sv =
     if is_opaque then set_sigelt_attrs [(`"opaque_to_smt")] sv
     else sv

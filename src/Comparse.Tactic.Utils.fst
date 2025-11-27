@@ -17,7 +17,7 @@ let get_name_from_fv term_fv =
 val apply_binder: term -> binder -> Tac term
 let apply_binder t b =
   let real_q =
-    match (inspect_binder b).binder_qual with
+    match b.qual with
     | Q_Meta _ -> Q_Implicit
     | x -> x
   in

@@ -23,12 +23,15 @@ let mk_lemma_type_ensures bi ps_term x_term ctors =
     let (ctor_name, ctor_type) = c in
     let binders, _ = collect_arr_bs ctor_type in
     let branch_pattern =
-      Pat_Cons (pack_fv ctor_name) None (
-        Tactics.Util.map (fun b ->
-          let b_view = inspect_binder b in
-          (Pat_Var (bv_of_binder b) (seal (type_of_binder b)), not (Q_Explicit? b_view.binder_qual))
-        ) binders
-      )
+      Pat_Cons {
+        head = (pack_fv ctor_name);
+        univs = None;
+        subpats = (
+          Tactics.Util.map (fun (b: binder) ->
+            (Pat_Var { v = b; sort = (seal b.sort); }, not (Q_Explicit? b.qual))
+          ) binders
+        );
+      }
     in
     let term_to_length (ps_t:term) (t:term) =
       (`(prefixes_length (Mkparser_serializer_prefix?.serialize (`#ps_t) (`#t))))
@@ -73,13 +76,13 @@ let mk_lemma_type opt_concrete_bi type_unapplied params ctors =
   let (bi, parser_params) = GenerateParser.get_bytes_impl_and_parser_params opt_concrete_bi params in
   let (bytes_term, bytes_like_term) = bi in
   let (ps_term, _) = GenerateParser.parser_from_type bi type_applied in
-  let x_bv = fresh_bv_named "x" in
-  let x_term = pack (Tv_Var x_bv) in
+  let x_binder = fresh_binder_named "x" type_applied in
+  let x_term = pack (Tv_Var x_binder) in
   let lemma_requires = (`True) in
   let lemma_ensures = mk_lemma_type_ensures bi ps_term x_term ctors in
   let lemma_smtpat = mk_lemma_type_smtpat ps_term x_term in
   let eff = pack_comp (C_Lemma lemma_requires (`(fun () -> (`#lemma_ensures))) (`([smt_pat (`#lemma_smtpat)]))) in
-  mk_arr (parser_params @ [mk_binder x_bv type_applied]) eff
+  mk_arr (parser_params @ [x_binder]) eff
 
 val my_isomorphism_length_with_id:
   #bytes:Type0 -> {| bytes_like bytes |} -> #a:Type -> #b:Type ->
@@ -113,10 +116,10 @@ let simplify_length_lemma () =
     smt ()
   else (
     //Remove garbage from environment
-    Tactics.Util.iter (fun b ->
-      try clear b
-      with _ -> ()
-    ) (binders_of_env (cur_env()));
+    //Tactics.Util.iter (fun b ->
+    //  try clear b
+    //  with _ -> ()
+    //) (binders_of_env (cur_env()));
 
     //Retrieve the parser and value to unfold / destruct
     let (ps_term, x_term) =
@@ -213,12 +216,12 @@ let gen_length_lemma_def type_fv =
   in
   let opt_concrete_bi = GenerateParser.get_optional_concrete_bytes_impl type_declaration in
   match inspect_sigelt type_declaration with
-  | Sg_Inductive name [] params typ constructors -> (
+  | Sg_Inductive { nm = name; univs = []; params; typ; ctors = constructors} -> (
     let lemma_type = mk_lemma_type opt_concrete_bi type_fv params constructors in
     let lemma_val = mk_lemma_val lemma_type in
     (lemma_type,  lemma_val)
   )
-  | Sg_Inductive _ _ _ _ _ -> fail "gen_length_lemma_def: higher order types are not supported"
+  | Sg_Inductive _ -> fail "gen_length_lemma_def: higher order types are not supported"
   | _ -> fail "gen_length_lemma_def: only inductives are supported"
 
 val gen_length_lemma: term -> Tac decls
@@ -227,10 +230,10 @@ let gen_length_lemma type_fv =
   let lemma_name = List.Tot.snoc (moduleof (top_env ()), "ps_" ^ (last type_name) ^ "_length") in
   let (lemma_type, lemma_val) = gen_length_lemma_def type_fv in
   //dump (term_to_string lemma_type);
-  let lemma_letbinding = pack_lb ({
+  let lemma_letbinding = {
     lb_fv = pack_fv lemma_name;
     lb_us = [];
     lb_typ = lemma_type;
     lb_def = lemma_val;
-  }) in
-  [pack_sigelt (Sg_Let false [lemma_letbinding])]
+  } in
+  [pack_sigelt (Sg_Let { isrec = false; lbs = [lemma_letbinding]; })]
