@@ -857,10 +857,11 @@ let gen_parser_aux type_fv force_smt =
     lb_def = parser_fun;
   } in
   let sv = pack_sigelt (Sg_Let { isrec = false; lbs = [parser_letbinding];}) in
-  let sv =
-    if is_opaque then set_sigelt_attrs [(`"opaque_to_smt")] sv
-    else sv
+  let attrs = splice_attrs () in
+  let attrs =
+    if is_opaque then attrs @ [(`"opaque_to_smt"); (`tac_opaque)] else attrs
   in
+  let sv = set_sigelt_attrs attrs sv in
   [sv]
 
 val gen_parser: term -> Tac decls
